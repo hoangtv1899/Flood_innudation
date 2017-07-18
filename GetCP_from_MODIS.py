@@ -1,7 +1,7 @@
 #!/data/apps/enthought_python/2.7.3/bin/python
 
 import numpy as np
-from skimage import io, measure
+from skimage import measure
 from scipy import interpolate, ndimage
 import shapely
 from shapely.geometry import Polygon

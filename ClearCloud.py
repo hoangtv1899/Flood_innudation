@@ -1,4 +1,4 @@
-#!/data/apps/enthought_python/2.7.3/bin/python
+#!/data/apps/anaconda/2.7-4.3.1/bin/python
 
 import ctypes
 import logging
@@ -128,8 +128,8 @@ def GetCP(i):
 	arr2 = tonumpyarray(c)
 	arr = tonumpyarray(sca)
 	modi = arr[nr*nc*i:nr*nc*(i+1)].reshape(nr, nc)
-	mods = 1*morphology.remove_small_objects(modi==2, min_size=10, connectivity=1)
-	mods = 1*(morphology.remove_small_objects(mods==0, min_size=10, connectivity=1)==0)
+	mods = 1*morphology.remove_small_objects(modi==2, min_size=20, connectivity=1)
+	mods = 1*(morphology.remove_small_objects(mods==0, min_size=20, connectivity=1)==0)
 	modstemp = np.zeros((nr+2, nc+2))
 	modstemp[1:-1,1:-1] = mods
 	if np.sum(mods) < 10:

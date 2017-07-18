@@ -1,4 +1,4 @@
-#!/data/apps/enthought_python/2.7.3/bin/python
+#!/data/apps/anaconda/2.7-4.3.1/bin/python
 
 import scipy.io
 import os
@@ -21,7 +21,6 @@ import matplotlib.pyplot as plt
 import multiprocessing as mp
 from multiprocessing import Manager
 from contextlib import closing
-from ClearCloud import ClearCloud
 
 #GetMOD09GQ(date(2011,4,23), date(2011,5,17), ['h11v04'])
 
@@ -196,8 +195,9 @@ for i in range(1):
 		temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv')
 
 #check the result
-d0 = date(2017,4,23)
-for i in range(1):
+d0 = date(2008,5,28)
+miss_dem = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/mississippi_elevation_clipped1.tif').ReadAsArray()
+for i in range(23):
 	for pre in ['MOD','MYD']:
 		t = (d0+timedelta(days=i)).strftime("%Y%m%d")
 		try:
@@ -223,13 +223,9 @@ for i in range(1):
 		try:
 			res_arr[cloud_mask==1] = y2_test
 		except:
-			try:
-				legal_arr = np.logical_and(arr1!=0,np.logical_and(arr1!=-28672,arr2!=-28672))
-				res_arr[np.logical_and(cloud_mask==0,
-										legal_arr)] = y2_test
-			except:
-				print header
-				continue
+			print header
+			continue
+		res_arr[np.logical_and(miss_dem>165,res_arr==1)]=0
 		driver = gdal.GetDriverByName('GTiff')
 		#owl
 		dataset = driver.Create(
