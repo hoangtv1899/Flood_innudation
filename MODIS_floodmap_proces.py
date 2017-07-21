@@ -24,12 +24,12 @@ from contextlib import closing
 
 #GetMOD09GQ(date(2011,4,23), date(2011,5,17), ['h11v04'])
 
-water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/SWBD_mississippi_resampled_clipped2.tif').ReadAsArray()
+water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/SWBD_mississippi_resampled3.tif').ReadAsArray()
 d0 = date(2000,2,24)
 
-for i in range(311):
+for i in range(367):
 	t = (d0+timedelta(days=i)).strftime('%Y%m%d')
-	for pre in ['MOD','MYD']:
+	for pre in ['MOD']:
 		temp = pd.DataFrame()
 		val = []
 		types = []
@@ -43,7 +43,7 @@ for i in range(311):
 		#cloud and nodata mask
 		cloud_mask = np.logical_and(arr1+arr2 !=0,
 									np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
-									np.logical_and(arr1!=0,arr1<1500))).astype(np.int)
+									np.logical_and(arr1!=0,arr1<2000))).astype(np.int)
 		if len(np.unique(cloud_mask)) ==1:
 			continue
 		#b2-b1
@@ -112,7 +112,8 @@ for i in range(311):
 		temp['Index'] = index
 		temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv')
 
-csv_2000 = sorted(glob('/ssd-scratch/htranvie/Flood/data/csv/new_hit_*2000*.csv'))
+csv_2000 = sorted(glob('/ssd-scratch/htranvie/Flood/data/csv/new_hit_MOD2000*.csv'))+\
+			sorted(glob('/ssd-scratch/htranvie/Flood/data/csv/new_hit_MOD2001*.csv'))
 train_data = pd.DataFrame()
 for csv_file in csv_2000:
 	temp_train_data = pd.read_csv(csv_file)
@@ -134,15 +135,15 @@ features = list(df_mod1.columns[:5])
 X = df_mod1[features]
 class_weight = {1:0.6,0:0.4}
 #decision tree
-dt = RandomForestClassifier(min_samples_split=300,class_weight=class_weight,random_state=99,n_jobs=-1)
+dt = RandomForestClassifier(min_samples_split=100,class_weight=class_weight,random_state=99,n_jobs=-1)
 dt.fit(X,y)
 #joblib.dump(dt,'/ssd-scratch/htranvie/Flood/data/rf.joblib.pkl',compress=9)
 #dt = joblib.load('/ssd-scratch/htranvie/Flood/data/rf.joblib.pkl')
 
 #test dataset
-d0 = date(2017,4,23)
+d0 = date(2008,5,28)
 
-for i in range(1):
+for i in range(35):
 	t = (d0+timedelta(days=i)).strftime('%Y%m%d')
 	for pre in ['MOD','MYD']:
 		temp = pd.DataFrame()
@@ -196,8 +197,8 @@ for i in range(1):
 
 #check the result
 d0 = date(2008,5,28)
-miss_dem = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/mississippi_elevation_clipped1.tif').ReadAsArray()
-for i in range(23):
+miss_dem = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/mississippi_elevation_clipped2.tif').ReadAsArray()
+for i in range(35):
 	for pre in ['MOD','MYD']:
 		t = (d0+timedelta(days=i)).strftime("%Y%m%d")
 		try:
@@ -225,7 +226,8 @@ for i in range(23):
 		except:
 			print header
 			continue
-		res_arr[np.logical_and(miss_dem>165,res_arr==1)]=0
+		res_arr[np.logical_and(miss_dem>172,res_arr==1)]=0
+		res_arr[np.logical_and(np.logical_and(cloud_mask==1,water_mask==1),res_arr==0)]=1
 		driver = gdal.GetDriverByName('GTiff')
 		#owl
 		dataset = driver.Create(
