@@ -24,18 +24,18 @@ from contextlib import closing
 
 #GetMOD09GQ(date(2011,4,23), date(2011,5,17), ['h11v04'])
 
-water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/SWBD_iowa_resampled3.tif').ReadAsArray()
+water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/SWBD_iowa_resampled2.tif').ReadAsArray()
 d0 = date(2000,2,24)
 for i in range(191):
 	t = (d0+timedelta(days=i)).strftime('%Y%m%d')
 	for pre in ['MOD']:
 		temp = pd.DataFrame()
 		val = []
-#		types = []
+		types = []
 		index = []
 		header = '/ssd-scratch/htranvie/Flood/data/clipped_data/'+pre+'09GQ.A'+t
-#		if os.path.isfile('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv'):
-#			continue
+		if os.path.isfile('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv'):
+			continue
 		try:
 			arr1 = gdal.Open(header+'_b01.tif').ReadAsArray()
 			arr2 = gdal.Open(header+'_b02.tif').ReadAsArray()
@@ -44,7 +44,7 @@ for i in range(191):
 		#cloud and nodata mask
 		cloud_mask = np.logical_and(arr1+arr2 !=0,
 									np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
-									np.logical_and(arr1!=0,arr1<1500))).astype(np.int)
+									np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
 		per = np.sum(cloud_mask)/float(np.sum(np.ones(arr1.shape)))
 		if per < 0.5:
 			continue
@@ -64,55 +64,55 @@ for i in range(191):
 		#water band1
 		pix_wa_b1 = arr1[np.logical_and(water_mask==1,cloud_mask==1)]
 		val += pix_wa_b1.tolist()
-#		types += ['Water']*len(pix_wa_b1)
+		types += ['Water']*len(pix_wa_b1)
 		index += ['Band1']*len(pix_wa_b1)
 		#land band1
-#		pix_land_b1 = arr1[np.logical_and(water_mask==0,cloud_mask==1)]
-#		val += pix_land_b1.tolist()
-#		types += ['Land']*len(pix_land_b1)
-#		index += ['Band1']*len(pix_land_b1)
+		pix_land_b1 = arr1[np.logical_and(water_mask==0,cloud_mask==1)]
+		val += pix_land_b1.tolist()
+		types += ['Land']*len(pix_land_b1)
+		index += ['Band1']*len(pix_land_b1)
 		#water band2
 		pix_wa_b2 = arr2[np.logical_and(water_mask==1,cloud_mask==1)]
 		val += pix_wa_b2.tolist()
-#		types += ['Water']*len(pix_wa_b2)
+		types += ['Water']*len(pix_wa_b2)
 		index += ['Band2']*len(pix_wa_b2)
 		#land band2
-#		pix_land_b2 = arr2[np.logical_and(water_mask==0,cloud_mask==1)]
-#		val += pix_land_b2.tolist()
-#		types += ['Land']*len(pix_land_b2)
-#		index += ['Band2']*len(pix_land_b2)
+		pix_land_b2 = arr2[np.logical_and(water_mask==0,cloud_mask==1)]
+		val += pix_land_b2.tolist()
+		types += ['Land']*len(pix_land_b2)
+		index += ['Band2']*len(pix_land_b2)
 		#water band2 - band1
 		pix_wa_min = min1[np.logical_and(water_mask==1,cloud_mask==1)]
 		val += pix_wa_min.tolist()
-#		types += ['Water']*len(pix_wa_min)
+		types += ['Water']*len(pix_wa_min)
 		index += ['Band2 - Band1']*len(pix_wa_min)
 		#land band2 - band1
-#		pix_land_min = min1[np.logical_and(water_mask==0,cloud_mask==1)]
-#		val += pix_land_min.tolist()
-#		types += ['Land']*len(pix_land_min)
-#		index += ['Band2 - Band1']*len(pix_land_min)
+		pix_land_min = min1[np.logical_and(water_mask==0,cloud_mask==1)]
+		val += pix_land_min.tolist()
+		types += ['Land']*len(pix_land_min)
+		index += ['Band2 - Band1']*len(pix_land_min)
 		#water b2/b1
 		pix_wa_rat = rat1[np.logical_and(water_mask==1,cloud_mask==1)]
 		val += pix_wa_rat.tolist()
-#		types += ['Water']*len(pix_wa_rat)
+		types += ['Water']*len(pix_wa_rat)
 		index += ['Band2 / Band1']*len(pix_wa_rat)
 		#land b2/b1
-#		pix_land_rat = rat1[np.logical_and(water_mask==0,cloud_mask==1)]
-#		val += pix_land_rat.tolist()
-#		types += ['Land']*len(pix_land_rat)
-#		index += ['Band2 / Band1']*len(pix_land_rat)
+		pix_land_rat = rat1[np.logical_and(water_mask==0,cloud_mask==1)]
+		val += pix_land_rat.tolist()
+		types += ['Land']*len(pix_land_rat)
+		index += ['Band2 / Band1']*len(pix_land_rat)
 		#water ndvi
 		pix_wa_ndvi = ndvi[np.logical_and(water_mask==1,cloud_mask==1)]
 		val += pix_wa_ndvi.tolist()
-#		types += ['Water']*len(pix_wa_ndvi)
+		types += ['Water']*len(pix_wa_ndvi)
 		index += ['ndvi']*len(pix_wa_ndvi)
 		#land ndvi
-#		pix_land_ndvi = ndvi[np.logical_and(water_mask==0,cloud_mask==1)]
-#		val += pix_land_ndvi.tolist()
-#		types += ['Land']*len(pix_land_ndvi)
-#		index += ['ndvi']*len(pix_land_ndvi)
+		pix_land_ndvi = ndvi[np.logical_and(water_mask==0,cloud_mask==1)]
+		val += pix_land_ndvi.tolist()
+		types += ['Land']*len(pix_land_ndvi)
+		index += ['ndvi']*len(pix_land_ndvi)
 		temp['Val'] = val
-#		temp['Types'] = types
+		temp['Types'] = types
 		temp['Index'] = index
 		temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv',index=False)
 
@@ -127,13 +127,13 @@ df_mod1 = pd.DataFrame()
 for idx in df_mod['Index'].unique().tolist():
 	df_mod1[idx] = df_mod.loc[df_mod['Index']==idx]['Val'].reset_index(drop=True)
 
-#df_mod1['Types'] = df_mod.loc[df_mod['Index']==idx]['Types'].reset_index(drop=True)
-#df_mod1 = df_mod1.dropna()
-#types = df_mod1['Types'].tolist()
-#int_types = [1 if x=='Water' else 0 for x in types]
-#df_mod1['Targets'] = int_types
+df_mod1['Types'] = df_mod.loc[df_mod['Index']==idx]['Types'].reset_index(drop=True)
+df_mod1 = df_mod1.dropna()
+types = df_mod1['Types'].tolist()
+int_types = [1 if x=='Water' else 0 for x in types]
+df_mod1['Targets'] = int_types
 
-#y = df_mod1['Targets']
+y = df_mod1['Targets']
 #y = pd.DataFrame()
 #y['Targets'] = [1]*len(X)
 features = list(df_mod1.columns[:5])
@@ -143,12 +143,12 @@ class_weight = {1:0.6,0:0.4}
 dt = RandomForestClassifier(min_samples_split=100,class_weight=class_weight,random_state=99,n_jobs=-1)
 dt.fit(X,y)
 #joblib.dump(dt,'/ssd-scratch/htranvie/Flood/data/rf.joblib.pkl',compress=9)
-#dt = joblib.load('/ssd-scratch/htranvie/Flood/data/rf.joblib.pkl')
+#dt = joblib.load('/ssd-scratch/htranvie/Flood/data/rf_heavy.joblib.pkl')
 
 #test dataset
-d0 = date(2017,4,1)
+d0 = date(2014,7,27)
 
-for i in range(30):
+for i in range(1):
 	t = (d0+timedelta(days=i)).strftime('%Y%m%d')
 	for pre in ['MOD','MYD']:
 		temp = pd.DataFrame()
@@ -162,7 +162,7 @@ for i in range(30):
 			continue
 		cloud_mask = np.logical_and(arr1+arr2 !=0,
 									np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
-									np.logical_and(arr1!=0,arr1<1500))).astype(np.int)
+									np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
 		if len(np.unique(cloud_mask))==1:
 			continue
 		#b2-b1
@@ -201,10 +201,10 @@ for i in range(30):
 		temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv',index=False)
 
 #check the result
-d0 = date(2017,4,1)
+d0 = date(2014,7,27)
 miss_dem = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/iowa_elevation_clipped.tif').ReadAsArray()
 water_mask1 = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/SWBD_iowa_resampled3.tif').ReadAsArray()
-for i in range(35):
+for i in range(1):
 	for pre in ['MOD','MYD']:
 		t = (d0+timedelta(days=i)).strftime("%Y%m%d")
 		try:
@@ -216,6 +216,7 @@ for i in range(35):
 			df_mod2[idx] = test_data.loc[test_data['Index']==idx]['Val'].reset_index(drop=True)
 		df_mod2 = df_mod2.dropna()
 		#decision tree predict
+		features = list(df_mod2.columns[:5])
 		X2 = df_mod2[features]
 		y2_test = dt.predict(X2)
 		header = '/ssd-scratch/htranvie/Flood/data/clipped_data/'+pre+'09GQ.A'+t
@@ -225,7 +226,7 @@ for i in range(35):
 		arr2 = gdal.Open(header+'_b02.tif').ReadAsArray()
 		cloud_mask = np.logical_and(arr1+arr2 !=0,
 									np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
-									np.logical_and(arr1!=0,arr1<2000))).astype(np.int)
+									np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
 		res_arr = np.ones(arr1.shape)*-1
 		try:
 			res_arr[cloud_mask==1] = y2_test
@@ -233,7 +234,7 @@ for i in range(35):
 			print header
 			continue
 		res_arr[np.logical_and(miss_dem>215,res_arr==1)]=0
-		res_arr[np.logical_and(np.logical_and(cloud_mask==1,water_mask1==1),res_arr==0)]=1
+#		res_arr[np.logical_and(np.logical_and(cloud_mask==1,water_mask1==1),res_arr==0)]=1
 		driver = gdal.GetDriverByName('GTiff')
 		#owl
 		dataset = driver.Create(
@@ -251,9 +252,10 @@ for i in range(35):
 		dataset.FlushCache()
 
 #Landsat validation
-d_tm = date(2008,6,1)
-miss_dem_landsat = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/mississippi_elevation_clipped_landsat.tif').ReadAsArray()
-for d_tm in [date(2008,6,16)]:
+d_tm = date(2014,7,19)
+miss_dem_landsat = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/iowa_elevation_landsat.tif').ReadAsArray()
+for d_tm in [date(2014,7,4),date(2014,7,27)]:
+	print d_tm.strftime('%Y%m%d')
 	collected_samples = gdal.Open('/ssd-scratch/htranvie/Flood/data/landsat/test_data/collected_samples_'+d_tm.strftime('%Y%m%d')+'.tif').ReadAsArray()
 	temp = pd.DataFrame()
 	val = []
@@ -262,12 +264,12 @@ for d_tm in [date(2008,6,16)]:
 	temp1 = pd.DataFrame()
 	val1 = []
 	index1 = []
-	ds1_tm = gdal.Open('/ssd-scratch/htranvie/Flood/data/landsat/test_data/LT05_'+d_tm.strftime('%Y%m%d')+'_b3.tif')
+	ds1_tm = gdal.Open('/ssd-scratch/htranvie/Flood/data/landsat/test_data/LE07_L1TP_'+d_tm.strftime('%Y%m%d')+'_T1_B3_clipped.TIF')
 	geom_tm = ds1_tm.GetGeoTransform()
 	arr_red = ds1_tm.ReadAsArray().astype(np.float)
-	arr_nir = gdal.Open('/ssd-scratch/htranvie/Flood/data/landsat/test_data/LT05_'+d_tm.strftime('%Y%m%d')+'_b4.tif').ReadAsArray().astype(np.float)
-	arr_swir = gdal.Open('/ssd-scratch/htranvie/Flood/data/landsat/test_data/LT05_'+d_tm.strftime('%Y%m%d')+'_b5.tif').ReadAsArray().astype(np.float)
-	legal_arr_tm = np.logical_and(np.logical_and(arr_red>1,arr_nir>1),
+	arr_nir = gdal.Open('/ssd-scratch/htranvie/Flood/data/landsat/test_data/LE07_L1TP_'+d_tm.strftime('%Y%m%d')+'_T1_B4_clipped.TIF').ReadAsArray().astype(np.float)
+	arr_swir = gdal.Open('/ssd-scratch/htranvie/Flood/data/landsat/test_data/LE07_L1TP_'+d_tm.strftime('%Y%m%d')+'_T1_B5_clipped.TIF').ReadAsArray().astype(np.float)
+	legal_arr_tm = np.logical_and(np.logical_and(arr_red>1,arr_nir>1),#arr_red<11800)
 									np.logical_and(arr_red<100,arr_swir>1))
 	#b2-b1
 	min_tm1 = np.ones(arr_red.shape)*-9999
@@ -367,10 +369,10 @@ for d_tm in [date(2008,6,16)]:
 	temp['Val'] = val
 	temp['Index'] = index
 	temp['Types'] = types
-	temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/Landsat_'+d_tm.strftime('%Y%j')+'_train.csv')
+#	temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/Landsat_'+d_tm.strftime('%Y%j')+'_train.csv')
 	temp1['Val'] = val1
 	temp1['Index'] = index1
-	temp1.to_csv('/ssd-scratch/htranvie/Flood/data/csv/Landsat_'+d_tm.strftime('%Y%j')+'_test.csv')
+#	temp1.to_csv('/ssd-scratch/htranvie/Flood/data/csv/Landsat_'+d_tm.strftime('%Y%j')+'_test.csv')
 	
 	df_mod = temp.copy()
 	df_mod1 = pd.DataFrame()
@@ -390,7 +392,7 @@ for d_tm in [date(2008,6,16)]:
 	df_mod1['Targets'] = int_types
 	
 	y = df_mod1['Targets']
-	features = list(df_mod1.columns[:6])
+	features = list(df_mod1.columns[:5])
 	X = df_mod1[features]
 	class_weight = {1:0.6,0:0.4}
 	#decision tree
@@ -405,12 +407,12 @@ for d_tm in [date(2008,6,16)]:
 	
 	df_mod01 = df_mod01.dropna()
 	
-	features1 = list(df_mod01.columns[:6])
+	features1 = list(df_mod01.columns[:5])
 	X_test = df_mod01[features1]
 	y_test = dt_tm.predict(X_test)
 	res_arr_tm = np.ones(arr_red.shape)*-99
 	res_arr_tm[legal_arr_tm] = y_test
-	res_arr_tm[np.logical_and(miss_dem_landsat>172,res_arr_tm==1)]=0
+	res_arr_tm[np.logical_and(miss_dem_landsat>215,res_arr_tm==1)]=0
 	driver = gdal.GetDriverByName('GTiff')
 	dataset = driver.Create(
 			'/ssd-scratch/htranvie/Flood/data/results/Landsat_'+d_tm.strftime('%Y%m%d')+'_bin.tif',
