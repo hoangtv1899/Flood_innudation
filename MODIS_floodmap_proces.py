@@ -10,6 +10,7 @@ from sklearn.externals import joblib
 from glob import glob
 import scipy.ndimage
 import pandas as pd
+from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier#, export_graphviz
 from sklearn.ensemble import RandomForestClassifier
 import matplotlib as mpl
@@ -24,9 +25,10 @@ from contextlib import closing
 
 #GetMOD09GQ(date(2011,4,23), date(2011,5,17), ['h11v04'])
 
-water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/SWBD_iowa_resampled2.tif').ReadAsArray()
-d0 = date(2000,2,24)
-for i in range(191):
+water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/swbd_greater_iowa.tif').ReadAsArray()
+area_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/mask_area.tif').ReadAsArray()
+d0 = date(2000,2,27)
+for i in range(187):
 	t = (d0+timedelta(days=i)).strftime('%Y%m%d')
 	for pre in ['MOD']:
 		temp = pd.DataFrame()
@@ -42,11 +44,11 @@ for i in range(191):
 		except:
 			continue
 		#cloud and nodata mask
-		cloud_mask = np.logical_and(arr1+arr2 !=0,
+		cloud_mask = np.logical_and(np.logical_and(arr1+arr2 !=0,area_mask==1),
 									np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
 									np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
 		per = np.sum(cloud_mask)/float(np.sum(np.ones(arr1.shape)))
-		if per < 0.5:
+		if per < 0.2:
 			continue
 		if len(np.unique(cloud_mask)) ==1:
 			continue
@@ -138,11 +140,14 @@ y = df_mod1['Targets']
 #y['Targets'] = [1]*len(X)
 features = list(df_mod1.columns[:5])
 X = df_mod1[features]
-class_weight = {1:0.6,0:0.4}
-#decision tree
-dt = RandomForestClassifier(min_samples_split=100,class_weight=class_weight,random_state=99,n_jobs=-1)
+class_weight = {1:0.8,0:0.2}
+#RandomForestClassifier
+#dt = RandomForestClassifier(max_depth=5,n_estimators=50,class_weight=class_weight,n_jobs=-1)
+#Support Vector Machine
+dt = SVC(gamma=2, C=1)
 dt.fit(X,y)
-#joblib.dump(dt,'/ssd-scratch/htranvie/Flood/data/rf.joblib.pkl',compress=9)
+#joblib.dump(dt,'/ssd-scratch/htranvie/Flood/data/svc_gamma.joblib.pkl',compress=9)
+#joblib.dump(dt,'/ssd-scratch/htranvie/Flood/data/rf_large1.joblib.pkl',compress=9)
 #dt = joblib.load('/ssd-scratch/htranvie/Flood/data/rf_heavy.joblib.pkl')
 
 #test dataset
@@ -201,7 +206,7 @@ for i in range(1):
 		temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv',index=False)
 
 #check the result
-d0 = date(2014,7,27)
+d0 = date(2014,7,4)
 miss_dem = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/iowa_elevation_clipped.tif').ReadAsArray()
 water_mask1 = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/SWBD_iowa_resampled3.tif').ReadAsArray()
 for i in range(1):
@@ -394,9 +399,9 @@ for d_tm in [date(2014,7,4),date(2014,7,27)]:
 	y = df_mod1['Targets']
 	features = list(df_mod1.columns[:5])
 	X = df_mod1[features]
-	class_weight = {1:0.6,0:0.4}
+	class_weight = {1:0.7,0:0.3}
 	#decision tree
-	dt_tm = RandomForestClassifier(min_samples_split=100,class_weight=class_weight,random_state=99,n_jobs=-1)
+	dt_tm = RandomForestClassifier(n_estimators=100, min_samples_split=10,class_weight=class_weight,random_state=99,n_jobs=-1)
 	dt_tm.fit(X,y)
 	#joblib.dump(dt_tm,'/ssd-scratch/htranvie/Flood/data/rf_tm.joblib.pkl',compress=9)
 	#dt_tm = joblib.load('/ssd-scratch/htranvie/Flood/data/rf_tm.joblib.pkl')
@@ -430,89 +435,98 @@ for d_tm in [date(2014,7,4),date(2014,7,27)]:
 
 #upscale Landsat to MODIS resolution
 
-d_tm = date(2008,6,16)
-land = gdal.Open('/share/ssd-scratch/htranvie/Flood/data/landsat/test_data/land.tif').ReadAsArray()
+d_tm = date(2014,7,4)
+#land = gdal.Open('/share/ssd-scratch/htranvie/Flood/data/landsat/test_data/land.tif').ReadAsArray()
 mod_file = '/ssd-scratch/htranvie/Flood/data/results/MOD_'+d_tm.strftime('%Y%m%d')+'_bin.tif'
-mod_flood_file = '/ssd-scratch/htranvie/Flood/data/mod_flood/clipped_data/MOD_FLOOD.'+d_tm.strftime('%Y%m%d')+'.tif'
+myd_file = '/ssd-scratch/htranvie/Flood/data/results/MYD_'+d_tm.strftime('%Y%m%d')+'_bin.tif'
+mod_flood_file = '/ssd-scratch/htranvie/Flood/data/MWP/clipped_data/MWP_'+d_tm.strftime('%Y%j')+'_100W050N_1D1OS.tif'
 tm_file = '/ssd-scratch/htranvie/Flood/data/results/Landsat_'+d_tm.strftime('%Y%m%d')+'_bin.tif'
 tm_resample_file = '/ssd-scratch/htranvie/Flood/data/results/Landsat_'+d_tm.strftime('%Y%m%d')+'_resampled1.tif'
 
 #	os.system('gdalwarp -overwrite -dstnodata -99 -ts 116 127 '+tm_check_file+' '+tm_check_resample)
-os.system('gdalwarp -overwrite -r cubicspline -srcnodata -99 -dstnodata -99 -tr 0.00270337 0.00208643 '+tm_file+' '+tm_resample_file)
+os.system('gdalwarp -overwrite -r cubicspline -srcnodata -99 -dstnodata -99 -tr 0.00221239 0.00221239 '+tm_file+' '+tm_resample_file)
 #	os.system('gdalwarp -overwrite -r cubicspline -ts 1684 1837 '+mod_file+' '+mod_resample_file)
 ds_mod = gdal.Open(mod_file)
 arr_mod = ds_mod.ReadAsArray()
+arr_myd = gdal.Open(myd_file).ReadAsArray()
 arr_mod_flood = gdal.Open(mod_flood_file).ReadAsArray()
 arr_tm = gdal.Open(tm_resample_file).ReadAsArray()
-arr_tm[land==1]=0
-arr_mod[land==2]=1
-arr_mod_flood[arr_mod_flood==2]=1
-arr_tm[arr_tm==-99]=-1
+
+#MOD
+#for classified modis
+nan_arr_mod = np.logical_or(np.logical_or(arr_mod==-1,arr_mod_flood==0),arr_tm==-99).astype(np.int)
+#hit
+hit_arr = np.logical_and(arr_mod[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==1)
+no_hit = np.sum(hit_arr)
+#miss
+miss_arr = np.logical_and(arr_mod[nan_arr_mod!=1]==0,arr_tm[nan_arr_mod!=1]==1)
+no_miss = np.sum(miss_arr)
+#false
+false_arr = np.logical_and(arr_mod[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==0)
+no_false = np.sum(false_arr)
+#correct negative
+corrneg = np.logical_and(arr_mod[nan_arr_mod!=1]==0,arr_tm[nan_arr_mod!=1]==0)
+no_corrneg = np.sum(corrneg)
+no_hit,no_miss,no_false,no_corrneg
+no_hit/(float(no_miss)+no_hit), no_false/(float(no_hit)+no_false), (no_hit*no_corrneg-no_false*no_miss)/float((no_hit+no_miss)*(no_corrneg+no_false))
+#for mod flood images
+#hit
+hit_arr1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]>1,arr_tm[nan_arr_mod!=1]==1)
+no_hit1 = np.sum(hit_arr1)
+#miss
+miss_arr1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==1)
+no_miss1 = np.sum(miss_arr1)
+#false
+false_arr1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]>1,arr_tm[nan_arr_mod!=1]==0)
+no_false1 = np.sum(false_arr1)
+#correct negative
+corrneg1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==0)
+no_corrneg1 = np.sum(corrneg1)
+no_hit1,no_miss1,no_false1,no_corrneg1
+no_hit1/(float(no_miss1)+no_hit1), no_false1/(float(no_hit1)+no_false1), (no_hit1*no_corrneg1-no_false1*no_miss1)/float((no_hit1+no_miss1)*(no_corrneg1+no_false1))
+#result array
+res_arr = np.zeros(arr_mod.shape)
+res_arr[nan_arr_mod!=1] = hit_arr+miss_arr*2+false_arr*3
+res_arr1 = np.zeros(arr_mod.shape)
+res_arr1[nan_arr_mod!=1] = hit_arr1+miss_arr1*2+false_arr1*3
+
 #plot
 fig=plt.figure()
-arr_plots = [arr_mod, arr_tm, arr_mod_flood, arr_tm]
+arr_plots = [arr_mod.copy(), arr_tm.copy(), arr_mod_flood.copy(), arr_tm.copy()]
 for i,arr_plot in enumerate(arr_plots):
 	ax=fig.add_subplot(1,4,i+1)
-	m = Basemap(llcrnrlon=-91.3,llcrnrlat=40.60,urcrnrlon=-90.75,urcrnrlat=41.2,\
+	m = Basemap(llcrnrlon=-92,llcrnrlat=40.50,urcrnrlon=-90,urcrnrlat=45,\
 				projection='mill',lon_0=0)
-	m.readshapefile('/ssd-scratch/htranvie/Flood/shapes/SWBD_mississippi2',
-							'SWBD_mississippi',linewidth=0.8/4, color='k',zorder=1)
+	m.readshapefile('/ssd-scratch/htranvie/Flood/shapes/swbd_iowa2',
+							'swbd_iowa2',linewidth=0.8/4, color='k',zorder=1)
 	if np.unique(arr_plot).shape == (3,):
+		if -99 in np.unique(arr_plot):
+			arr_plot[arr_plot<0]=-1
 		cmap1 = LinearSegmentedColormap.from_list('mycmap', [(0 / 2., 'grey'),
 															(1/2., (0, 0, 0, 0)),
 															(2 / 2., 'blue')]
 														)
-	elif np.unique(arr_plot).shape == (2,):
-		cmap1 = LinearSegmentedColormap.from_list('mycmap', [(0 / 2., (0, 0, 0, 0)),
+	elif np.unique(arr_plot).shape == (4,):
+		arr_plot[arr_plot>1]=2
+		cmap1 = LinearSegmentedColormap.from_list('mycmap', [(0 / 2., 'grey'),
+															(1/2., (0, 0, 0, 0)),
 															(2 / 2., 'blue')]
 														)
 #	elif np.unique(oyscacld[i,:,:]).shape == (1,):
 #		cmap1 = LinearSegmentedColormap.from_list('mycmap', [(2 / 2., 'grey')])
 	m.imshow(np.flipud(arr_plot), cmap=cmap1,zorder=2)
 
-fig.savefig('h.png',dpi=800)
-#for classified modis
-#hit
-hit_arr = np.logical_and(arr_mod==1,arr_tm==1)
-no_hit = np.sum(hit_arr)
-#miss
-miss_arr = np.logical_and(arr_mod==0,arr_tm==1)
-no_miss = np.sum(miss_arr)
-#false
-false_arr = np.logical_and(arr_mod==1,arr_tm==0)
-no_false = np.sum(false_arr)
-#correct negative
-corrneg = np.logical_and(arr_mod==0,arr_tm==0)
-no_corrneg = np.sum(corrneg)
-no_hit,no_miss,no_false,no_corrneg
-no_hit/(float(no_miss)+no_hit), no_false/(float(no_hit)+no_false), (no_hit*no_corrneg-no_false*no_miss)/float((no_hit+no_miss)*(no_corrneg+no_false))
-#for mod flood images
-#hit
-hit_arr1 = np.logical_and(np.logical_and(arr_mod_flood==1,arr_tm==1),arr_mod!=-1)
-no_hit1 = np.sum(hit_arr1)
-#miss
-miss_arr1 = np.logical_and(np.logical_and(arr_mod_flood==0,arr_tm==1),arr_mod!=-1)
-no_miss1 = np.sum(miss_arr1)
-#false
-false_arr1 = np.logical_and(np.logical_and(arr_mod_flood==1,arr_tm==0),arr_mod!=-1)
-no_false1 = np.sum(false_arr1)
-#correct negative
-corrneg1 = np.logical_and(np.logical_and(arr_mod_flood==0,arr_tm==0),arr_mod!=-1)
-no_corrneg1 = np.sum(corrneg1)
-no_hit1,no_miss1,no_false1,no_corrneg1
-no_hit1/(float(no_miss1)+no_hit1), no_false1/(float(no_hit1)+no_false1), (no_hit1*no_corrneg1-no_false1*no_miss1)/float((no_hit1+no_miss1)*(no_corrneg1+no_false1))
-#result array
-res_arr = hit_arr+miss_arr*2+false_arr*3
-res_arr1 = hit_arr1+miss_arr1*2+false_arr1*3
+fig.savefig('h_20140704.png',dpi=800)
+
 #plot
 fig=plt.figure()
-arr_plots1 = [res_arr,res_arr1]
+arr_plots1 = [res_arr.copy(),res_arr1.copy()]
 for i,arr_plot in enumerate(arr_plots1):
 	ax=fig.add_subplot(1,2,i+1)
-	m = Basemap(llcrnrlon=-91.3,llcrnrlat=40.60,urcrnrlon=-90.75,urcrnrlat=41.2,\
+	m = Basemap(llcrnrlon=-92,llcrnrlat=40.50,urcrnrlon=-90,urcrnrlat=45,\
 				projection='mill',lon_0=0)
-	m.readshapefile('/ssd-scratch/htranvie/Flood/shapes/SWBD_mississippi2',
-							'SWBD_mississippi',linewidth=0.8/4, color='k',zorder=1)
+#	m.readshapefile('/ssd-scratch/htranvie/Flood/shapes/swbd_iowa2',
+#							'swbd_iowa2',linewidth=0.4/4, color='k',zorder=1)
 	cmap1 = LinearSegmentedColormap.from_list('mycmap', [(0 / 4., (0, 0, 0, 0)),
 															(2 / 4., 'blue'),
 															(3 / 4., 'red'),
@@ -520,7 +534,7 @@ for i,arr_plot in enumerate(arr_plots1):
 														)
 	m.imshow(np.flipud(arr_plot), cmap=cmap1,zorder=2)
 
-fig.savefig('h1.png',dpi=800)
+fig.savefig('h1_20140704.png',dpi=800)
 driver = gdal.GetDriverByName('GTiff')
 dataset1 = driver.Create(
 		'/ssd-scratch/htranvie/Flood/data/results/MOD_'+d_tm.strftime('%Y%m%d')+'_cat.tif',
