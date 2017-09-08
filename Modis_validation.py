@@ -111,7 +111,7 @@ def ClassifyMODIS(d0,i,pre):
 	temp = pd.DataFrame()
 	val = []
 	index = []
-	header = '/ssd-scratch/htranvie/Flood/data/clipped_data/'+pre+'09GQ.A'+t
+	header = 'clipped_data/'+pre+'09GQ.A'+(d0+timedelta(days=i)).strftime('%Y%m%d')
 	#header = '/ssd-scratch/htranvie/Flood/data/downloads/'+(d0+timedelta(days=i)).strftime('%Y-%m-%d')+'/'+pre+'09GQ.A'+(d0+timedelta(days=i)).strftime('%Y%j')
 	try:
 		arr1 = gdal.Open(header+'_b01.tif').ReadAsArray()
@@ -181,7 +181,7 @@ def ClassifyMODIS(d0,i,pre):
 	driver = gdal.GetDriverByName('GTiff')
 	#owl
 	dataset = driver.Create(
-			'/ssd-scratch/htranvie/Flood/data/results/'+pre+'_'+t+'_bin.tif',
+			'results/'+pre+'_'+t+'_bin.tif',
 			res_arr.shape[1],
 			res_arr.shape[0],
 			1,
@@ -194,7 +194,45 @@ def ClassifyMODIS(d0,i,pre):
 	outband.SetNoDataValue(-99)
 	dataset.FlushCache()
 
-def ReclassifyMODIS(d0,pre):
+def WriteMODIS(d0,d1,refl_vi):
+	ndays, nr, nc = refl_vi.shape
+	td = (d1-d0).days
+	if td*2 > ndays:
+		return
+	file_oyscacld = glob('results/*_'+d1.strftime('%Y%m%d')+'*_bin.tif')[0]
+	ds = gdal.Open(file_oyscacld)
+	#file MOD
+	mod_arr = refl_vi[td*2,:,:]
+	driver = gdal.GetDriverByName('GTiff')
+	dataset = driver.Create(
+			'Cloud_free/MOD_FM'+d1.strftime('%Y%m%d')+'.tif',
+			mod_arr.shape[1],
+			mod_arr.shape[0],
+			1,
+			gdal.GDT_Int16,
+			)
+	dataset.SetGeoTransform(ds.GetGeoTransform())
+	outband = dataset.GetRasterBand(1)
+	outband.WriteArray(mod_arr)
+	outband.FlushCache()
+	dataset.FlushCache()
+	#file MYD
+	myd_arr = refl_vi[td*2+1,:,:]
+	driver1 = gdal.GetDriverByName('GTiff')
+	dataset1 = driver1.Create(
+			'Cloud_free/MYD_FM'+d1.strftime('%Y%m%d')+'.tif',
+			myd_arr.shape[1],
+			myd_arr.shape[0],
+			1,
+			gdal.GDT_Int16,
+			)
+	dataset1.SetGeoTransform(ds.GetGeoTransform())
+	outband1 = dataset1.GetRasterBand(1)
+	outband1.WriteArray(myd_arr)
+	outband1.FlushCache()
+	dataset1.FlushCache()
+
+def ReclassifyMODIS(d0,pre,random_state=None,dem_arr=None):
 	t = d0.strftime('%Y%m%d')
 	temp = pd.DataFrame()
 	val = []
@@ -203,19 +241,26 @@ def ReclassifyMODIS(d0,pre):
 	val1 = []
 	index1 = []
 	type1 = []
-	header = '/ssd-scratch/htranvie/Flood/data/downloads/'+d0.strftime('%Y-%m-%d')+'/'+pre+'09GQ.A'+d0.strftime('%Y%j')
+	#header = '/ssd-scratch/htranvie/Flood/data/downloads/'+d0.strftime('%Y-%m-%d')+'/'+pre+'09GQ.A'+d0.strftime('%Y%j')
+	header = 'clipped_data/'+pre+'09GQ.A'+d0.strftime('%Y%m%d')
 	try:
 		arr1 = gdal.Open(header+'_b01.tif').ReadAsArray()
 		arr2 = gdal.Open(header+'_b02.tif').ReadAsArray()
+		water_mask = gdal.Open('results/'+pre+'_'+t+'_bin.tif').ReadAsArray()
 	except:
 		return
-	water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/results/'+pre+'_'+t+'_bin.tif').ReadAsArray()
 	n_pix_water = np.sum(water_mask==1)
+	if n_pix_water < 100:
+		return
 	#random select land pixels
-	xx,yy = np.where(np.logical_and(water_mask==0,np.logical_and(arr2>3000,arr2<5000)))
+	xx,yy = np.where(np.logical_and(water_mask==0,arr1<1700))
+	xx1,yy1 = np.where(water_mask==1)
 	pix_land = np.random.randint(0,xx.shape[0],n_pix_water).tolist()
+	pix_water_discard = np.random.randint(0,xx1.shape[0],3*n_pix_water/4).tolist()
 	for pix in pix_land:
 		water_mask[xx[pix],yy[pix]] = 2
+	for pix1 in pix_water_discard:
+		water_mask[xx1[pix1],yy1[pix1]] = 0
 	cloud_mask = np.logical_and(arr1+arr2 !=0,
 								np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
 								np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
@@ -316,8 +361,8 @@ def ReclassifyMODIS(d0,pre):
 	y = df_mod_train['Types']
 	features = list(df_mod_train.columns[:5])
 	X = df_mod_train[features]
-	class_weight = {1:0.8,0:0.2}
-	dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,n_jobs=-1)
+	class_weight = {1:0.7,0:0.3}
+	dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,n_jobs=-1,random_state=random_state)
 	dt.fit(X,y)
 	df_mod_test = pd.DataFrame()
 	for idx in temp['Index'].unique().tolist():
@@ -335,6 +380,8 @@ def ReclassifyMODIS(d0,pre):
 		res_arr[np.logical_and(cloud_mask==1,np.logical_and(water_mask!=2,water_mask!=1))] = y2_test
 		res_arr[water_mask==1] = 1
 		res_arr[water_mask==2] = 0
+		if dem_arr is not None:
+			res_arr[np.logical_and(dem_arr>195,res_arr==1)] = 0
 	except:
 		print header
 		return
@@ -342,8 +389,10 @@ def ReclassifyMODIS(d0,pre):
 #		res_arr[np.logical_and(np.logical_and(cloud_mask==1,water_mask1==1),res_arr==0)]=1
 	driver = gdal.GetDriverByName('GTiff')
 	#owl
+	if os.path.isfile('results/'+pre+'_'+t+'_bin_new.tif'):
+		os.remove('results/'+pre+'_'+t+'_bin_new.tif')
 	dataset = driver.Create(
-			'/ssd-scratch/htranvie/Flood/data/results/'+pre+'_'+t+'_bin_new.tif',
+			'results/'+pre+'_'+t+'_bin_new.tif',
 			res_arr.shape[1],
 			res_arr.shape[0],
 			1,
@@ -491,7 +540,8 @@ def Landsat8Training(collected_sample, landsat_image):
 	return dt_tm
 
 def Landsat8Classify(date0,dt_tm):
-	landsat_images = sorted(glob('/ssd-scratch/htranvie/Flood/data/downloads/'+date0.strftime('%Y-%m-%d')+'/LC08_L1TP_*.*'))
+	#landsat_images = sorted(glob('/ssd-scratch/htranvie/Flood/data/downloads/'+date0.strftime('%Y-%m-%d')+'/LC08_L1TP_*.*'))
+	landsat_images = sorted(glob('Landsat/LC08_L1TP_'+date0.strftime('%Y%m%d')+'*.[tT][iI][fF]'))
 	temp = pd.DataFrame()
 	val = []
 	index = []
@@ -552,7 +602,7 @@ def Landsat8Classify(date0,dt_tm):
 	res_arr_tm[legal_arr_tm] = y_test
 	driver = gdal.GetDriverByName('GTiff')
 	dataset = driver.Create(
-			'/ssd-scratch/htranvie/Flood/data/downloads/'+date0.strftime('%Y-%m-%d')+'/Landsat_'+date0.strftime('%Y%m%d')+'_bin.tif',
+			'Landsat/Landsat_'+date0.strftime('%Y%m%d')+'_bin.tif',
 			res_arr_tm.shape[1],
 			res_arr_tm.shape[0],
 			1,
@@ -571,7 +621,7 @@ def ResampleLandsat(img,img1):
 def LandsatValidation(d0,createTif=None):
 	ds_mod = gdal.Open('/ssd-scratch/htranvie/Flood/data/results/MOD_'+d0.strftime('%Y%m%d')+'_bin_new.tif')
 	arr_mod = ds_mod.ReadAsArray()
-	arr_mod_flood = gdal.Open(glob('/ssd-scratch/htranvie/Flood/data/downloads/'+d0.strftime('%Y-%m-%d')+'/MWP_*.tif')[0]).ReadAsArray()
+	arr_mod_flood = gdal.Open(glob('/ssd-scratch/htranvie/Flood/data/downloads/'+d0.strftime('%Y-%m-%d')+'/MWP_*_1D1OS.tif')[0]).ReadAsArray()
 	arr_tm = gdal.Open(glob('/ssd-scratch/htranvie/Flood/data/downloads/'+d0.strftime('%Y-%m-%d')+'/Landsat_*_resampled.tif')[0]).ReadAsArray()
 	results = pd.DataFrame()
 	val = []
@@ -652,7 +702,97 @@ def LandsatValidation(d0,createTif=None):
 		outband2.SetNoDataValue(0)
 		dataset2.FlushCache()
 	return results
-	
+
+def LandsatValidationMODIS(d0,pre,createTif=None):
+	ds_mod = gdal.Open('Cloud_free/'+pre+'_FM'+d0.strftime('%Y%m%d')+'.tif')
+	arr_mod = ds_mod.ReadAsArray()
+	arr_tm = gdal.Open(glob('Landsat/Landsat_*'+d0.strftime('%Y%m%d')+'*_resampled.tif')[0]).ReadAsArray()
+	list_org = glob('results/'+pre+'_'+d0.strftime('%Y%m%d')+'*.tif')
+	arr_mod_flood_file = [x for x in list_org if 'new' in x][0]
+	if not arr_mod_flood_file:
+		arr_mod_flood = gdal.Open(list_org[0]).ReadAsArray()
+	else:
+		arr_mod_flood = gdal.Open(arr_mod_flood_file).ReadAsArray()
+	results = pd.DataFrame()
+	val = []
+	type = []
+	im_type = []
+	date = []
+	nan_arr_mod = (arr_tm==-99).astype(np.int)
+	#hit
+	hit_arr = np.logical_and(arr_mod[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==1)
+	no_hit = np.sum(hit_arr)
+	#miss
+	miss_arr = np.logical_and(arr_mod[nan_arr_mod!=1]==0,arr_tm[nan_arr_mod!=1]==1)
+	no_miss = np.sum(miss_arr)
+	#false
+	false_arr = np.logical_and(arr_mod[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==0)
+	no_false = np.sum(false_arr)
+	#correct negative
+	corrneg = np.logical_and(arr_mod[nan_arr_mod!=1]==0,arr_tm[nan_arr_mod!=1]==0)
+	no_corrneg = np.sum(corrneg)
+	val += [no_hit,no_miss,no_false,no_corrneg]
+	type += ['Hit','Miss','False','Correct Negative']
+	val += [no_hit/(float(no_miss)+no_hit), no_false/(float(no_hit)+no_false), (no_hit*no_corrneg-no_false*no_miss)/float((no_hit+no_miss)*(no_corrneg+no_false))]
+	type += ['POD','FAR','HK']
+	im_type += ['Cloud_free_MOD']*7
+	#for mod flood images
+	#hit
+	hit_arr1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==1)
+	no_hit1 = np.sum(hit_arr1)
+	#miss
+	miss_arr1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]<=0,arr_tm[nan_arr_mod!=1]==1)
+	no_miss1 = np.sum(miss_arr1)
+	#false
+	false_arr1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]==1,arr_tm[nan_arr_mod!=1]==0)
+	no_false1 = np.sum(false_arr1)
+	#correct negative
+	corrneg1 = np.logical_and(arr_mod_flood[nan_arr_mod!=1]<=0,arr_tm[nan_arr_mod!=1]==0)
+	no_corrneg1 = np.sum(corrneg1)
+	val += [no_hit1,no_miss1,no_false1,no_corrneg1]
+	type += ['Hit','Miss','False','Correct Negative']
+	val += [no_hit1/(float(no_miss1)+no_hit1), no_false1/(float(no_hit1)+no_false1), (no_hit1*no_corrneg1-no_false1*no_miss1)/float((no_hit1+no_miss1)*(no_corrneg1+no_false1))]
+	type += ['POD','FAR','HK']
+	im_type += ['MOD']*7
+	date += [d0.strftime('%Y-%m-%d')]*14
+	results['Date'] = date
+	results['Im_type'] = im_type
+	results['Types'] = type
+	results['Values'] = val
+	if createTif=='OK':
+		res_arr = np.zeros(arr_mod.shape)
+		res_arr[nan_arr_mod!=1] = hit_arr+miss_arr*2+false_arr*3
+		res_arr1 = np.zeros(arr_mod.shape)
+		res_arr1[nan_arr_mod!=1] = hit_arr1+miss_arr1*2+false_arr1*3
+		driver = gdal.GetDriverByName('GTiff')
+		dataset1 = driver.Create(
+				'validation/Cloud_free_'+pre+'_'+d0.strftime('%Y%m%d')+'_cat.tif',
+				res_arr.shape[1],
+				res_arr.shape[0],
+				1,
+				gdal.GDT_Int16,
+				)
+		dataset1.SetGeoTransform(ds_mod.GetGeoTransform())
+		outband1 = dataset1.GetRasterBand(1)
+		outband1.WriteArray(res_arr)
+		outband1.FlushCache()
+		outband1.SetNoDataValue(0)
+		dataset1.FlushCache()
+		dataset2 = driver.Create(
+				'validation/'+pre+'_'+d0.strftime('%Y%m%d')+'_cat.tif',
+				res_arr1.shape[1],
+				res_arr1.shape[0],
+				1,
+				gdal.GDT_Int16,
+				)
+		dataset2.SetGeoTransform(ds_mod.GetGeoTransform())
+		outband2 = dataset2.GetRasterBand(1)
+		outband2.WriteArray(res_arr1)
+		outband2.FlushCache()
+		outband2.SetNoDataValue(0)
+		dataset2.FlushCache()
+	return results
+
 file_path = sys.argv[1]
 
 if os.path.isdir(file_path+'reprojected/') == False:
@@ -670,48 +810,63 @@ for f in all_files:
 			headers[header].append(f)
 
 ReprojectNClip(headers)
-dt = joblib.load('/ssd-scratch/htranvie/Flood/data/rf.joblib.pkl')
-d0 = date(2014,6,17)
 
-for i in [0,2,18,23,50,57,59]:
-	for pre in ['MOD']:
-		ClassifyMODIS(d0,i,pre)
+dt = joblib.load('rf.joblib.pkl')
+d0 = date(2013,6,7)
 
-for i in [0,2,18,23,50,57,59]:
+for i in [0,48,64,416]:
 	d1 = d0+timedelta(days=i)
-	ReclassifyMODIS(d1,'MOD')
-
-for i in [0,2,18,23,50,59]:
-	d1 = d0+timedelta(days=i)
-	tm_path = '/ssd-scratch/htranvie/Flood/data/downloads/'+d1.strftime("%Y-%m-%d")+'/'
+	tm_path = 'Landsat/'
 	dt_tm = Landsat8Training(tm_path+'collected_samples_'+d1.strftime("%Y%m%d")+'.tif',
 			tm_path+'LC08_L1TP_*'+d1.strftime("%Y%m%d"))
 	Landsat8Classify(d1,dt_tm)
 
+d0 = date(2013,7,18)
+dem_arr = gdal.Open('elevation/iowa_dem_resampled.tif').ReadAsArray()
 tot_res = pd.DataFrame()
-for i in [0,2,18,23,50,57,59]:
+for i in range(31):
 	d1 = d0+timedelta(days=i)
-	file_path = '/ssd-scratch/htranvie/Flood/data/downloads/'+d1.strftime('%Y-%m-%d')+'/'
-	tm_file = glob(file_path+'Landsat_*_bin.tif')[0]
-	tm_resampled_file = tm_file.split('.')[0]+'_resampled.tif'
-	ResampleLandsat(tm_file,tm_resampled_file)
-	pd_res = LandsatValidation(d1,'OK')
-	tot_res = tot_res.append(pd_res, ignore_index=True)
+	for pre in ['MOD','MYD']:
+		ClassifyMODIS(d0,i,pre)
+		ReclassifyMODIS(d1,pre,89,dem_arr)
+#		file_path = '/ssd-scratch/htranvie/Flood/data/downloads/'+d1.strftime('%Y-%m-%d')+'/'
+#		tm_file = glob(file_path+'Landsat_*_bin.tif')[0]
+#		tm_resampled_file = tm_file.split('.')[0]+'_resampled.tif'
+#		ResampleLandsat(tm_file,tm_resampled_file)
+		pd_res = LandsatValidationMODIS(d1,'MOD','OK')
+		tot_res = tot_res.append(pd_res, ignore_index=True)
+		tot_res.to_csv('data_2013.csv',index=False)
+
+d2 = date(2014,6,17)
+tot_res1 = pd.DataFrame()
+for i in [0,2,18,23,50,57,59]:
+	d3 = d2+timedelta(days=i)
+	for pre in ['MOD']:
+#		ClassifyMODIS(d2,i,pre)
+		ReclassifyMODIS(d3,pre)
+#		file_path = '/ssd-scratch/htranvie/Flood/data/downloads/'+d1.strftime('%Y-%m-%d')+'/'
+#		tm_file = glob(file_path+'Landsat_*_bin.tif')[0]
+#		tm_resampled_file = tm_file.split('.')[0]+'_resampled.tif'
+#		ResampleLandsat(tm_file,tm_resampled_file)
+		pd_res = LandsatValidation(d3,'OK')
+#			pod_mod,pod_mwp = pd_res[pd_res.Types=='POD'].Values.tolist()
+		tot_res1 = tot_res1.append(pd_res, ignore_index=True)
+#			if pod_mod > pod_mwp:
+#				count += 1
+#	print count
+		
+		tot_res1.to_csv('data_2014.csv',index=False)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#Write cloud free modis
+t_mid = date(2014,7,28)
+#refl_vi = scipy.io.loadmat('refl_vi'+t_mid.strftime('%Y%m%d')+'.mat')['refl_vi'+t_mid.strftime('%Y%m%d')]
+#WriteMODIS(date(2013,8,2),t_mid,refl_vi)
+LandsatBin = glob('Landsat/Landsat_'+t_mid.strftime('%Y%m%d')+'_bin.tif')[0]
+LandsatResampled = LandsatBin.split('.')[0]+'_resampled.tif'
+#ResampleLandsat(LandsatBin, LandsatResampled)
+pd_res = LandsatValidationMODIS(t_mid,'MOD','OK')
+pd_res1 = LandsatValidationMODIS(t_mid,'MYD','OK')
+pd_res
+pd_res1

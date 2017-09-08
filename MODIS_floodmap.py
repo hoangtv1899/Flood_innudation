@@ -29,6 +29,7 @@ def GetMOD09GQ(dn0, dn1, tiles):
 	dateDelta = dn1 - dn0
 	
 	ftp_path = 'https://e4ftl01.cr.usgs.gov/'
+	tempdata_path = 'tempdata/'#'/share/ssd-scratch/htranvie/Flood/tempdata/'
 	list_hdf = []
 	for i in range(dateDelta.days+1):
 		ids = datetime.strftime(dn0 + td(days=i), '%Y.%m.%d')
@@ -50,9 +51,9 @@ def GetMOD09GQ(dn0, dn1, tiles):
 				except:
 					print 'error '+dir+' '+ids
 					continue
-				if not os.path.isfile('/share/ssd-scratch/htranvie/Flood/tempdata/'+hdf_file):
+				if not os.path.isfile(tempdata_path+hdf_file):
 					f = urllib2.urlopen(ftp_path+moddir+'/'+hdf_file)
-					with open('/share/ssd-scratch/htranvie/Flood/tempdata/'+hdf_file, "wb") as code:
+					with open(tempdata_path+hdf_file, "wb") as code:
 						code.write(f.read())
 				print 'download complete'
 		list_hdf += glob('/share/ssd-scratch/htranvie/Flood/tempdata/*'+(dn0+td(days=i)).strftime('%Y%j')+'*.hdf')

@@ -25,18 +25,19 @@ from contextlib import closing
 
 #GetMOD09GQ(date(2011,4,23), date(2011,5,17), ['h11v04'])
 
-water_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/swbd_greater_iowa.tif').ReadAsArray()
-area_mask = gdal.Open('/ssd-scratch/htranvie/Flood/data/elevation/mask_area.tif').ReadAsArray()
-d0 = date(2000,2,27)
-for i in range(187):
+elevation_path = 'elevation/'#'/ssd-scratch/htranvie/Flood/data/elevation/'
+water_mask = gdal.Open(elevation_path+'SWBD_iowa_resampled1.tif').ReadAsArray()
+area_mask = gdal.Open(elevation_path+'mask_area.tif').ReadAsArray()
+d0 = date(2000,2,24)
+for i in range(311):
 	t = (d0+timedelta(days=i)).strftime('%Y%m%d')
 	for pre in ['MOD']:
 		temp = pd.DataFrame()
 		val = []
 		types = []
 		index = []
-		header = '/ssd-scratch/htranvie/Flood/data/clipped_data/'+pre+'09GQ.A'+t
-		if os.path.isfile('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv'):
+		header = 'clipped_data/'+pre+'09GQ.A'+t
+		if os.path.isfile('csv/new_hit_'+pre+t+'.csv'):
 			continue
 		try:
 			arr1 = gdal.Open(header+'_b01.tif').ReadAsArray()
@@ -44,7 +45,7 @@ for i in range(187):
 		except:
 			continue
 		#cloud and nodata mask
-		cloud_mask = np.logical_and(np.logical_and(arr1+arr2 !=0,area_mask==1),
+		cloud_mask = np.logical_and(arr1+arr2 !=0,
 									np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
 									np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
 		per = np.sum(cloud_mask)/float(np.sum(np.ones(arr1.shape)))
@@ -116,9 +117,9 @@ for i in range(187):
 		temp['Val'] = val
 		temp['Types'] = types
 		temp['Index'] = index
-		temp.to_csv('/ssd-scratch/htranvie/Flood/data/csv/new_hit_'+pre+t+'.csv',index=False)
+		temp.to_csv('csv/new_hit_'+pre+t+'.csv',index=False)
 
-csv_2000 = sorted(glob('/ssd-scratch/htranvie/Flood/data/csv/new_hit_MOD2000*.csv'))
+csv_2000 = sorted(glob('csv/new_hit_MOD2000*.csv'))
 train_data = pd.DataFrame()
 for csv_file in csv_2000:
 	temp_train_data = pd.read_csv(csv_file)
@@ -140,11 +141,11 @@ y = df_mod1['Targets']
 #y['Targets'] = [1]*len(X)
 features = list(df_mod1.columns[:5])
 X = df_mod1[features]
-class_weight = {1:0.8,0:0.2}
+class_weight = {1:0.7,0:0.3}
 #RandomForestClassifier
-#dt = RandomForestClassifier(max_depth=5,n_estimators=50,class_weight=class_weight,n_jobs=-1)
+dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,n_jobs=-1)
 #Support Vector Machine
-dt = SVC(gamma=2, C=1)
+#dt = SVC(gamma=2, C=1)
 dt.fit(X,y)
 #joblib.dump(dt,'/ssd-scratch/htranvie/Flood/data/svc_gamma.joblib.pkl',compress=9)
 #joblib.dump(dt,'/ssd-scratch/htranvie/Flood/data/rf_large1.joblib.pkl',compress=9)
