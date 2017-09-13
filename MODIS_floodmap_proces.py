@@ -11,6 +11,7 @@ from glob import glob
 import scipy.ndimage
 import pandas as pd
 from sklearn.svm import SVC
+from sklearn import cross_validation
 from sklearn.tree import DecisionTreeClassifier#, export_graphviz
 from sklearn.ensemble import RandomForestClassifier
 import matplotlib as mpl
@@ -136,14 +137,32 @@ types = df_mod1['Types'].tolist()
 int_types = [1 if x=='Water' else 0 for x in types]
 df_mod1['Targets'] = int_types
 
+#cross_validation
+cv = cross_validation.KFold(len(df_mod1),n_folds=10)
+
 y = df_mod1['Targets']
 #y = pd.DataFrame()
 #y['Targets'] = [1]*len(X)
 features = list(df_mod1.columns[:5])
 X = df_mod1[features]
 class_weight = {1:0.7,0:0.3}
+results = []
 #RandomForestClassifier
-dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,n_jobs=-1)
+dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,max_depth=8,n_jobs=-1)
+cc = 0
+for traincv, testcv in cv:
+	dt.fit(X.iloc[traincv],y.iloc[traincv])
+	joblib.dump(dt,'rf'+str(cc)+'.joblib.pkl',compress=9)
+	probas = dt.predict_proba(X.iloc[testcv])
+	results.append(probas)
+	cc+=1
+
+cc = 0
+for traincv,testcv in cv:
+	real = np.array(y.iloc[testcv])
+	res1 = (results[cc][:,1]>results[cc][:,0]).astype(np.int)
+	np.sum(real==res1)/float(len(real))
+	cc+=1
 #Support Vector Machine
 #dt = SVC(gamma=2, C=1)
 dt.fit(X,y)
