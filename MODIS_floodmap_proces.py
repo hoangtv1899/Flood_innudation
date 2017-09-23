@@ -29,6 +29,7 @@ from contextlib import closing
 elevation_path = 'elevation/'#'/ssd-scratch/htranvie/Flood/data/elevation/'
 water_mask = gdal.Open(elevation_path+'SWBD_iowa_resampled1.tif').ReadAsArray()
 area_mask = gdal.Open(elevation_path+'mask_area.tif').ReadAsArray()
+dem_mask = gdal.Open(elevation_path+'greater_iowa_elevation_resampled.tif').ReadAsArray()
 d0 = date(2000,2,24)
 for i in range(311):
 	t = (d0+timedelta(days=i)).strftime('%Y%m%d')
@@ -46,9 +47,8 @@ for i in range(311):
 		except:
 			continue
 		#cloud and nodata mask
-		cloud_mask = np.logical_and(arr1+arr2 !=0,
-									np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
-									np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
+		cloud_mask = np.logical_and(arr2 >0,
+									np.logical_and(arr1>0,arr1<1700)).astype(np.int)
 		per = np.sum(cloud_mask)/float(np.sum(np.ones(arr1.shape)))
 		if per < 0.2:
 			continue
@@ -115,6 +115,16 @@ for i in range(311):
 		val += pix_land_ndvi.tolist()
 		types += ['Land']*len(pix_land_ndvi)
 		index += ['ndvi']*len(pix_land_ndvi)
+		#water dem
+		pix_wa_dem = dem_mask[np.logical_and(water_mask==1,cloud_mask==1)]
+		val += pix_wa_dem.tolist()
+		types += ['Water']*len(pix_wa_dem)
+		index += ['dem']*len(pix_wa_dem)
+		#land dem
+		pix_land_dem = dem_mask[np.logical_and(water_mask==0,cloud_mask==1)]
+		val += pix_land_dem.tolist()
+		types += ['Land']*len(pix_land_dem)
+		index += ['dem']*len(pix_land_dem)
 		temp['Val'] = val
 		temp['Types'] = types
 		temp['Index'] = index
@@ -143,16 +153,17 @@ cv = cross_validation.KFold(len(df_mod1),n_folds=10)
 y = df_mod1['Targets']
 #y = pd.DataFrame()
 #y['Targets'] = [1]*len(X)
-features = list(df_mod1.columns[:5])
+features = list(df_mod1.columns[:6])
 X = df_mod1[features]
 class_weight = {1:0.7,0:0.3}
 results = []
 #RandomForestClassifier
-dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,max_depth=8,n_jobs=-1)
+#dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,max_depth=8,n_jobs=-1)
 cc = 0
 for traincv, testcv in cv:
-	dt.fit(X.iloc[traincv],y.iloc[traincv])
-	joblib.dump(dt,'rf'+str(cc)+'.joblib.pkl',compress=9)
+#	dt.fit(X.iloc[traincv],y.iloc[traincv])
+#	joblib.dump(dt,'rf'+str(cc)+'.joblib.pkl',compress=9)
+	dt = joblib.load('rf'+str(cc)+'.joblib.pkl')
 	probas = dt.predict_proba(X.iloc[testcv])
 	results.append(probas)
 	cc+=1
