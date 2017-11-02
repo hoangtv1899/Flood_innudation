@@ -15,7 +15,7 @@ from mpl_toolkits.basemap import Basemap
 from matplotlib.colors import LinearSegmentedColormap
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-#plt.style.use('ggplot')
+plt.style.use('ggplot')
 import multiprocessing as mp
 import sys
 from sklearn.externals import joblib
@@ -401,6 +401,25 @@ def Landsat8Training(collected_sample, landsat_image):
 	dt_tm.fit(X,y)
 	return dt_tm
 
+def Landsat7Training(collected_sample, landsat_image):
+	collected_sample_arr = gdal.Open(collected_sample).ReadAsArray()
+	tm_files = sorted(glob(landsat_image+'*.[Tt][Ii][Ff]'))
+	if not tm_files:
+		return
+	arr_red = gdal.Open(tm_files[0]).ReadAsArray().astype(np.float)
+	arr_nir = gdal.Open(tm_files[1]).ReadAsArray().astype(np.float)
+	arr_swir = gdal.Open(tm_files[2]).ReadAsArray().astype(np.float)
+	legal_arr_tm = np.logical_and(np.logical_and(arr_red>1,arr_nir>1),#arr_red<11800)
+									np.logical_and(arr_red<50,arr_swir>1))
+	landsatClass = train(arr_red, arr_nir, legal_arr_tm, collected_sample_arr,0, arr_swir)
+	y = landsatClass['Types']
+	features = list(landsatClass.columns[:6])
+	X = landsatClass[features]
+	class_weight = {1:0.7,0:0.3}
+	dt_tm = RandomForestClassifier(min_samples_split=10,class_weight=class_weight,random_state=99,n_jobs=-1)
+	dt_tm.fit(X,y)
+	return dt_tm
+
 def MergeMODIS(arr1,arr2):
 	res_arr = arr1.copy()
 	more_w = np.logical_and(arr2==1, arr1<1)
@@ -410,7 +429,7 @@ def MergeMODIS(arr1,arr2):
 	return res_arr
 
 def Landsat8Classify(date0,dt_tm):
-	landsat_images = sorted(glob('Landsat/LC08_L1TP_*'+date0.strftime('%Y%m%d')+'*.[tT][iI][fF]'))
+	landsat_images = sorted(glob('Landsat/LC08_LC01_*'+date0.strftime('%Y%m%d')+'*.[tT][iI][fF]'))
 	if not landsat_images:
 		return
 	ds1_tm = gdal.Open(landsat_images[0])
@@ -424,15 +443,41 @@ def Landsat8Classify(date0,dt_tm):
 	features1 = list(landsatClass.columns[:6])
 	X_test = landsatClass[features1]
 	y_test = dt_tm.predict(X_test)
+	landsat_dem = gdal.Open('Landsat/landsat_dem.tif').ReadAsArray()
 	res_arr_tm = np.ones(arr_red.shape)*-99
 	res_arr_tm[legal_arr_tm] = y_test
+	res_arr_tm[np.logical_and(res_arr_tm==1,landsat_dem>=250)] = 0
+	createTif('Landsat/Landsat_'+date0.strftime('%Y%m%d')+'_bin.tif', 
+				res_arr_tm, 
+				geom_tm, 
+				gdal.GDT_Int16)
+
+def Landsat7Classify(date0,dt_tm):
+	landsat_images = sorted(glob('Landsat/LE07_LC01_*'+date0.strftime('%Y%m%d')+'*.[tT][iI][fF]'))
+	if not landsat_images:
+		return
+	ds1_tm = gdal.Open(landsat_images[0])
+	geom_tm = ds1_tm.GetGeoTransform()
+	arr_red = ds1_tm.ReadAsArray().astype(np.float)
+	arr_nir = gdal.Open(landsat_images[1]).ReadAsArray().astype(np.float)
+	arr_swir = gdal.Open(landsat_images[2]).ReadAsArray().astype(np.float)
+	legal_arr_tm = np.logical_and(np.logical_and(arr_red>1,arr_nir>1),#arr_red<11800)
+									np.logical_and(arr_red<50,arr_swir>1))
+	landsatClass = test(arr_red, arr_nir, legal_arr_tm, arr_swir)
+	features1 = list(landsatClass.columns[:6])
+	X_test = landsatClass[features1]
+	y_test = dt_tm.predict(X_test)
+	landsat_dem = gdal.Open('Landsat/landsat_dem.tif').ReadAsArray()
+	res_arr_tm = np.ones(arr_red.shape)*-99
+	res_arr_tm[legal_arr_tm] = y_test
+	res_arr_tm[np.logical_and(res_arr_tm==1,landsat_dem>=250)] = 0
 	createTif('Landsat/Landsat_'+date0.strftime('%Y%m%d')+'_bin.tif', 
 				res_arr_tm, 
 				geom_tm, 
 				gdal.GDT_Int16)
 
 def ResampleLandsat(img,img1):
-	os.system('gdalwarp -overwrite -r cubicspline -srcnodata -99 -dstnodata -99 -tr 0.00219684 0.00219684 '+img+' '+img1)
+	os.system('gdalwarp -overwrite -r cubicspline -srcnodata -99 -dstnodata -99 -tr 0.00219619 0.00219619 '+img+' '+img1)
 
 def LandsatValidation(d0,arr_mod,arr_tm,arr_mod_flood=None):
 	results = pd.DataFrame()
@@ -458,40 +503,29 @@ def LandsatValidation(d0,arr_mod,arr_tm,arr_mod_flood=None):
 	results['Values'] = val_mod+val_modf
 	return results, res_mod, res_modf
 
-def LandsatValidationMODIS(d0,pre,createTif=None):
-	ds_mod = gdal.Open('Cloud_free/'+pre+'_FM'+d0.strftime('%Y%m%d')+'.tif')
-	arr_mod = ds_mod.ReadAsArray()
-	arr_tm = gdal.Open(glob('Landsat/Landsat_*'+d0.strftime('%Y%m%d')+'*_resampled.tif')[0]).ReadAsArray()
-	list_org = glob('results/'+pre+'_'+d0.strftime('%Y%m%d')+'*.tif')
-	arr_mod_flood_file = [x for x in list_org if 'new' in x][0]
-	if not arr_mod_flood_file:
-		arr_mod_flood = gdal.Open(list_org[0]).ReadAsArray()
-	else:
-		arr_mod_flood = gdal.Open(arr_mod_flood_file).ReadAsArray()
+def LandsatValidationEF5(d0,arr_mod,arr_tm,arr_mod_flood=None):
 	results = pd.DataFrame()
-	nan_arr_mod = (arr_tm!=-99)
-	val_mod, type_mod, im_mod, res_mod = catValidation(arr_tm, arr_mod, 'Cloud_free_MOD',
-														nan_arr_mod)
-	#for images with cloud
-	val_modf, type_modf, im_modf, res_modf = catValidation(arr_tm, arr_mod_flood, 'MOD',
-														nan_arr_mod,1,1)
-	date1 += [d0.strftime('%Y-%m-%d')]*14
+	if arr_mod_flood is None:
+		nan_arr_mod = np.logical_or(arr_mod==-1,arr_tm==-99).astype(np.int)
+		val_mod, type_mod, im_mod, res_mod = catValidation(arr_tm, arr_mod, 'MOD',
+														nan_arr_mod==0)
+		results['Date'] = [d0.strftime('%Y-%m-%d')]*7
+		results['Im_type'] = im_mod
+		results['Types'] = type_mod
+		results['Values'] = val_mod
+		return results, res_mod
+	nan_arr_mod = np.logical_or(arr_mod==-1,arr_tm==-99).astype(np.int)
+	val_mod, type_mod, im_mod, res_mod = catValidation(arr_tm, arr_mod, 'MOD',
+														nan_arr_mod==0)
+	#for mod flood images
+	val_modf, type_modf, im_modf, res_modf = catValidation(arr_tm, arr_mod_flood, 'EF5',
+														nan_arr_mod==0)
+	date1 = [d0.strftime('%Y-%m-%d')]*14
 	results['Date'] = date1
-	results['Im_type'] = im_mod + im_modf
-	results['Types'] = type_mod + type_modf
-	results['Values'] = val_mod + val_modf
-	if createTif=='OK':
-		createTif('validation/Cloud_free_'+pre+'_'+d0.strftime('%Y%m%d')+'_cat.tif', 
-					res_mod, 
-					ds_mod.GetGeoTransform(), 
-					gdal.GDT_Int16, 
-					0)
-		createTif('validation/'+pre+'_'+d0.strftime('%Y%m%d')+'_cat.tif', 
-					res_modf, 
-					ds_mod.GetGeoTransform(), 
-					gdal.GDT_Int16, 
-					0)
-	return results
+	results['Im_type'] = im_mod+im_modf
+	results['Types'] = type_mod+type_modf
+	results['Values'] = val_mod+val_modf
+	return results, res_mod, res_modf
 
 file_path = sys.argv[1]
 
@@ -511,22 +545,29 @@ for f in all_files:
 
 ReprojectNClip(headers)
 
-#rf = joblib.load('rf7.joblib.pkl')
-rf = joblib.load('rf_new7.joblib.pkl')
+rf = joblib.load('rf7.joblib.pkl')
+#rf = joblib.load('rf_new7.joblib.pkl')
 
-d0 = date(2013,3,19)
-
-for i in range(630):
+d0 = date(2012,5,18)
+tm_path = 'Landsat/'
+for i in range(1,130):
 	d1 = d0+timedelta(days=i)
-	tm_path = 'Landsat/'
-	dt_tm = Landsat8Training(tm_path+'collected_samples_20130319.tif',
-			tm_path+'LC08_L1TP_*'+d1.strftime("%Y%m%d"))
+	dt_tm = Landsat7Training(tm_path+'collected_samples.tif',
+			tm_path+'LE07_LC01_*'+d1.strftime("%Y%m%d"))
+	Landsat7Classify(d1,dt_tm)
+
+d0 = date(2013,4,1)
+
+for i in range(1,130):
+	d1 = d0+timedelta(days=i)
+	dt_tm = Landsat8Training(tm_path+'collected_samples.tif',
+			tm_path+'LC08_LC01_*'+d1.strftime("%Y%m%d"))
 	Landsat8Classify(d1,dt_tm)
 
-d0 = date(2013,3,19)
-dem_arr = gdal.Open('elevation/iowa_dem_resampled1.tif').ReadAsArray()
+d0 = date(2011,3,29)
+dem_arr = gdal.Open('elevation/dem1.tif').ReadAsArray()
 tot_res = pd.DataFrame()
-for i in range(627):
+for i in range(300):
 	d1 = d0+timedelta(days=i)
 	#landsat bin file
 	tm_files = glob('Landsat/Landsat_'+d1.strftime('%Y%m%d')+'_bin.tif')
@@ -584,6 +625,45 @@ for i in range(627):
 	tot_res = tot_res.append(pd_res, ignore_index=True)
 
 tot_res.to_csv('data.csv',index=False)
+
+#output from model
+d0 = date(2012,5,18)
+dem_arr = gdal.Open('elevation/dem1.tif').ReadAsArray()
+tot_res = pd.DataFrame()
+for i in range(441):
+	d1 = d0+timedelta(days=i)
+	#landsat bin file
+	tm_files = glob('Landsat/Landsat_'+d1.strftime('%Y%m%d')+'_bin.tif')
+	if not tm_files:
+		continue
+	tm_file = tm_files[0]
+	tm_resampled_file = tm_file.split('.')[0]+'_resampled.tif'
+	ResampleLandsat(tm_file,tm_resampled_file)
+	ds_tm = gdal.Open(tm_resampled_file)
+	geom = ds_tm.GetGeoTransform()
+	arr_tm = ds_tm.ReadAsArray()
+	#modis classified bin file
+	mod_files = sorted(glob('clipped_data/M[OY]D09GQ.A'+d1.strftime('%Y%m%d')+'_b0[12].tif'))
+	mod_band1 = gdal.Open(mod_files[0]).ReadAsArray()
+	mod_band2 = gdal.Open(mod_files[1]).ReadAsArray()
+	res_arr_mod0 = ClassifyMODIS(mod_band1,mod_band2,dem_arr,rf)
+	#model file
+	model_file = glob('ef5/mississippi_flood_map/output/depth.'+
+						d1.strftime('%Y%m%d')+'_*.tif')[0]
+	if not model_file:
+		pd_res, res_mod = LandsatValidation(d1,res_arr_mod0,arr_tm)
+	else:
+		clipped_model_file = 'results/depth.'+d1.strftime('%Y%m%d')+'.tif'
+		os.system('gdal_translate -projwin -92.3 44.3 -89.5 42.25 '+model_file+' '+
+					clipped_model_file)
+		arr_mod_flood = gdal.Open(clipped_model_file).ReadAsArray() > 0.25
+		arr_mod_flood = arr_mod_flood.astype(np.uint)
+		pd_res, res_mod,res_modf = LandsatValidationEF5(d1,res_arr_mod0,arr_tm,arr_mod_flood)
+		createTif('results/res_mod_'+d1.strftime('%Y%m%d')+'.tif',res_mod,geom)
+		createTif('results/res_modf_'+d1.strftime('%Y%m%d')+'.tif',res_modf,geom)
+	tot_res = tot_res.append(pd_res, ignore_index=True)
+
+tot_res.to_csv('model_vs_modis1.csv',index=False)
 
 #Write cloud free modis
 t_mid = date(2014,7,28)
