@@ -43,14 +43,14 @@ def adjustCoor(long,lat):
 
 def downloadDischarge(file_path):
 	site_no1 = file_path.split('site_no=')[1].split('&')[0]
-	if os.path.isfile('examples/obs/'+site_no1+'_discharge.csv'):
+	if os.path.isfile('ef5/examples/obs/'+site_no1+'_discharge.csv'):
 		return
 	content1 = urllib2.urlopen(file_path).readlines()
 	content1 = [x for x in content1 if '#' not in x]
 	if len(content1) < 100:
 		return
 	header1 = content1[0].replace('\n','').split('\t')
-	with open('examples/obs/'+site_no1+'_discharge.csv','w') as fo:
+	with open('ef5/examples/obs/'+site_no1+'_discharge.csv','w') as fo:
 		fo.write('Date,Discharge(m3/s)\n')
 		for line in content1[2:]:
 			datetime_idx1 = header1.index('datetime')

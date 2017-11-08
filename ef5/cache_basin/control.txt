@@ -1,0 +1,99 @@
+[Basic]
+DEM=basic/dem.tif
+DDM=basic/fdr.tif
+FAM=basic/fac.tif
+PROJ=geographic
+ESRIDDM=false
+selfFAM=true
+
+[PrecipForcing StageIV]
+TYPE=TIF
+UNIT=mm/d
+FREQ=d
+LOC=precip/
+NAME=mst4_04usYYYYMMDD.tif
+
+[PETForcing FEWSNET]
+TYPE=TIF
+UNIT=mm/d
+FREQ=d
+LOC=pet/
+NAME=etYYYYMMDD.bil.tif
+
+[Gauge Egypt]
+LON=-90.933
+LAT=35.858
+OBS=obs/07077380_discharge.csv
+BASINAREA=176.184
+OUTPUTTS=true
+
+[Basin Cache]
+GAUGE=Egypt
+
+[CrestParamSet Cache_Crest_params]
+gauge=Egypt
+wm=173.217178
+b=18.985971
+im=0.425571
+ke=0.002764
+fc=41.844730
+iwu=24.999310
+
+[kwparamset Cache_kw_params]
+gauge=Egypt
+under=1.103154
+leaki=0.080718
+alpha=2.643309
+beta=0.988497
+alpha0=0.130608
+th=7.873818
+isu=0.000001
+
+[simpleinundationparamset Cache_inun_params]
+gauge=Egypt
+alpha=0.5
+beta=0.6
+
+[CrestCaliParams Cache_Crest_cali1]
+gauge=Egypt
+objective=nsce
+dream_ndraw=2000
+wm=5.0,250.0
+b=0.1,20.0
+im=0.009999,0.5
+ke=0.001,1.0
+fc=0.0,150.0
+iwu=24.999,25.0
+
+[kwcaliparams Cache_Crest_cali1]
+gauge=Egypt
+alpha=0.01,3.0
+alpha0=0.01,5.0
+beta=0.01,1.0
+under=0.0001,3.0
+leaki=0.01,1.0
+th=1.0,10.0
+isu=0.0,0.00001
+
+[Task Cache_task]
+MODEL=CREST
+ROUTING=KW
+BASIN=Cache
+PRECIP=StageIV
+PET=FEWSNET
+INUNDATION=SIMPLEINUNDATION
+OUTPUT=output/
+PARAM_SET=Cache_Crest_params
+ROUTING_PARAM_Set=Cache_kw_params
+INUNDATION_PARAM_SET=Cache_inun_params
+STYLE=cali_dream
+cali_param=Cache_Crest_cali1
+routing_cali_param=Cache_Crest_cali1
+OUTPUT_GRIDS=INUNDATION
+TIMESTEP=d
+TIME_BEGIN=200301010000
+TIME_WARMEND=200312310000
+TIME_END=200412310000
+
+[Execute]
+TASK=Cache_task

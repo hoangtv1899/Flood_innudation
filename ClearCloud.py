@@ -69,24 +69,25 @@ def ClearCloud(oyscacld, t_start, t_end):
 		#np.save('coef'+str(num), coef)
 		end2 = time.time()
 		print 'Get VI coef: '+str(end2-start2)+' s'
-		sca_vi = np.zeros((n,nr,nc))
-		for jk in range(n):
-			modi = oyscacld[jk,:,:]
-			[cldr, cldc] = np.where(modi==1)
-			if cldc.size >0:
-				Pix = np.hstack([cldc.reshape(-1,1), cldr.reshape(-1,1), jk*DIST*np.ones((len(cldr),1))])
-				result = VarInt3d(Pix, c1, coef)
-				scai = modi.copy().astype(np.float32)
-				scai[cldr.reshape(-1,1), cldc.reshape(-1,1)] = result[:].reshape(-1,1)
-				scai = (scai > 0).astype(np.int8)
-				sca_vi[jk,:,:] = scai
-			else:
-				modi[modi==2] = 1
-				sca_vi[jk,:,:] = modi.astype(np.int8)
-				continue
+#		sca_vi = np.zeros((n,nr,nc))
+#		for jk in range(n):
+		modi = oyscacld[7,:,:]
+		[cldr, cldc] = np.where(modi==1)
+		if cldc.size >0:
+			Pix = np.hstack([cldc.reshape(-1,1), cldr.reshape(-1,1), DIST*np.ones((len(cldr),1))])
+			result = VarInt3d(Pix, c1, coef)
+			scai = modi.copy().astype(np.float32)
+			scai[cldr.reshape(-1,1), cldc.reshape(-1,1)] = result[:].reshape(-1,1)
+			scai = (scai > 0).astype(np.int8)
+#				sca_vi[jk,:,:] = scai
+		else:
+			modi[modi==2] = 1
+#				sca_vi[jk,:,:] = modi.astype(np.int8)
+			scai = modi.astype(np.int8)
+#				continue
 		end3 = time.time()
 		print 'Second loop '+str(end3-end2)+' s'
-	return sca_vi.astype(np.uint8)
+	return scai
 
 def init(sca_, nr1, nc1, DIST1, h_, c_):
 	global sca, nr, nc, DIST, h, c

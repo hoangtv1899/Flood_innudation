@@ -34,8 +34,7 @@ def GetMOD09GQ(dn0, dn1, tiles):
 	for i in range(dateDelta.days+1):
 		ids = datetime.strftime(dn0 + td(days=i), '%Y.%m.%d')
 		print '========'+ids+'========='
-		for dir in ['MOLT/MOD09GQ.006/',
-					'MOLA/MYD09GQ.006/']:
+		for dir in ['MOLT/MOD09GQ.006/']:
 			moddir = dir+ids
 			try:
 				request = urllib2.Request(ftp_path+moddir)

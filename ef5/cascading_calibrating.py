@@ -112,7 +112,7 @@ content = open(CTfile,'r').readlines()
 
 stationMeta, calibratingGauge,curr_style = ReadCT(content)
 #os.system('ef5 > status.txt')
-for jk,station in enumerate(stationMeta.gauge.tolist()):
+for jk,station in enumerate(['Winona', 'Wisconsin_rapids', 'Wisconsin_dells', 'Clinton', 'Rockton', 'Joslin']):
 	os.system('ef5')
 	CTfile = 'control.txt'
 	#Open control file

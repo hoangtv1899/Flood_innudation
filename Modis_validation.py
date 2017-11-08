@@ -309,7 +309,7 @@ def ReprojectNClip(headers):
 def ClassifyMODIS(arr1,arr2,dem_arr,rf):
 	cloud_mask = np.logical_and(arr1+arr2 !=0,
 								np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
-								np.logical_and(arr1!=0,arr1<1700))).astype(np.int)
+								np.logical_and(arr1!=0,arr1<1150))).astype(np.int)
 	if len(np.unique(cloud_mask))==1:
 		return
 	MODClassTest = test(arr1, arr2, cloud_mask, None, dem_arr)
@@ -564,6 +564,25 @@ for i in range(1,130):
 			tm_path+'LC08_LC01_*'+d1.strftime("%Y%m%d"))
 	Landsat8Classify(d1,dt_tm)
 
+d0 = date(2013,6,1)
+dem_arr = gdal.Open('elevation/dem2.tif').ReadAsArray()
+for i in range(190):
+	d1 = d0+timedelta(days=i)
+	mod_files = sorted(glob('clipped_data/MOD09GQ.A'+d1.strftime('%Y%m%d')+'_b0[12].tif'))
+	if mod_files:
+		if os.path.isfile('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif'):
+			continue
+		ds1 = gdal.Open(mod_files[0])
+		geom = ds1.GetGeoTransform()
+		mod_band1 = ds1.ReadAsArray()
+		mod_band2 = gdal.Open(mod_files[1]).ReadAsArray()
+		res_arr_mod0 = ClassifyMODIS(mod_band1,mod_band2,dem_arr,rf)
+		try:
+			createTif('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif',
+						res_arr_mod0, geom)
+		except:
+			pass
+
 d0 = date(2011,3,29)
 dem_arr = gdal.Open('elevation/dem1.tif').ReadAsArray()
 tot_res = pd.DataFrame()
@@ -638,7 +657,7 @@ for i in range(441):
 		continue
 	tm_file = tm_files[0]
 	tm_resampled_file = tm_file.split('.')[0]+'_resampled.tif'
-	ResampleLandsat(tm_file,tm_resampled_file)
+#	ResampleLandsat(tm_file,tm_resampled_file)
 	ds_tm = gdal.Open(tm_resampled_file)
 	geom = ds_tm.GetGeoTransform()
 	arr_tm = ds_tm.ReadAsArray()
@@ -654,8 +673,8 @@ for i in range(441):
 		pd_res, res_mod = LandsatValidation(d1,res_arr_mod0,arr_tm)
 	else:
 		clipped_model_file = 'results/depth.'+d1.strftime('%Y%m%d')+'.tif'
-		os.system('gdal_translate -projwin -92.3 44.3 -89.5 42.25 '+model_file+' '+
-					clipped_model_file)
+#		os.system('gdal_translate -projwin -92.3 44.3 -89.5 42.25 '+model_file+' '+
+#					clipped_model_file)
 		arr_mod_flood = gdal.Open(clipped_model_file).ReadAsArray() > 0.25
 		arr_mod_flood = arr_mod_flood.astype(np.uint)
 		pd_res, res_mod,res_modf = LandsatValidationEF5(d1,res_arr_mod0,arr_tm,arr_mod_flood)
