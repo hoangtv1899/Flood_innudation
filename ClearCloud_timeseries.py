@@ -11,24 +11,23 @@ from ClearCloud import ClearCloud
 from glob import glob
 import scipy.ndimage
 
-d0 = date(2013,6,8)
-for i in range(1,190):
+d0 = date(2013,6,14)
+for i in [16,32,48,57,73]:
+#for i in [377,409,425,441]:
 	d1 = d0 + timedelta(days=i)
-	if os.path.isfile('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')):
-		continue
+#	if os.path.isfile('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.npy'):
+#		continue
 	selectedDays = [(d1+timedelta(days=-x-1)).strftime('%Y%m%d') for x in range(7)][::-1]+\
 					[(d1+timedelta(days=x)).strftime('%Y%m%d') for x in range(8)]
-	refl_in = np.ones((15,95,95))*-1
+	refl_in = np.array([]).reshape(0,1494,1836)
 	count = 0
 	for j,day in enumerate(selectedDays):
-		if os.path.isfile('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.npy'):
-			arr = np.load('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.npy')
-		elif os.path.isfile('results/clipped/MOD_'+day+'_bin.tif'):
-			arr = io.imread('results/clipped/MOD_'+day+'_bin.tif')
+		if os.path.isfile('results/MOD_'+day+'_bin.tif'):
+			arr = io.imread('results/MOD_'+day+'_bin.tif')
 		else:
 			count += 1
-			continue
-		refl_in[j,:,:] = arr
+			arr = np.ones((1494,1836))*-1
+		refl_in = np.vstack([arr[np.newaxis,:,:],refl_in])
 	if count > 7:
 		continue
 	refl_in[refl_in==1] = 2
@@ -37,6 +36,6 @@ for i in range(1,190):
 	
 	refl_vi = ClearCloud(refl_in, d1+timedelta(days=-7), d1+timedelta(days=7))
 	plt.clf()
-	plt.imshow(refl_vi)
+	plt.imshow(np.ma.masked_where(refl_vi==-99,refl_vi))
 	plt.savefig('Cloud_free/img/h'+d1.strftime('%Y%m%d')+'.png')
 	np.save('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d'),refl_vi)

@@ -120,6 +120,52 @@ def train(arr1, arr2, cloud_mask, water_mask,land_type=0, arr3 = None, dem_arr =
 	df_mod_train = df_mod_train.dropna()
 	return df_mod_train
 
+def train2(arr1, arr2, cloud_mask, water_mask,land_type=0, dem_arr = None):
+	cloud_mask1 = cloud_mask==1
+	temp = pd.DataFrame()
+	val1 = []
+	index1 = []
+	type1 = []
+	#b2-b1
+	min1 = np.ones(arr1.shape)*-99
+	min1[cloud_mask1] = arr2[cloud_mask1] - arr1[cloud_mask1]
+	#ndvi
+	ndvi = np.ones(arr1.shape)*-99
+	sum1 = arr2 + arr1
+	ndvi[cloud_mask1] = min1[cloud_mask1]/sum1[cloud_mask1].astype(np.float)
+	#classify
+	#band2
+	#water
+	a,b,c = classify('Band2',arr2,water_mask,1,'train')
+	val1 += a; index1 += b; type1 += c
+	#land
+	a,b,c = classify('Band2',arr2,water_mask,land_type,'train')
+	val1 += a; index1 += b; type1 += c
+	#ndvi
+	#water
+	a,b,c = classify('ndvi',ndvi,water_mask,1,'train')
+	val1 += a; index1 += b; type1 += c
+	#land
+	a,b,c = classify('ndvi',ndvi,water_mask,land_type,'train')
+	val1 += a; index1 += b; type1 += c
+	if dem_arr is not None:
+		#dem
+		#water
+		a,b,c = classify('dem',dem_arr,water_mask,1,'train')
+		val1 += a; index1 += b; type1 += c
+		#land
+		a,b,c = classify('dem',dem_arr,water_mask,land_type,'train')
+		val1 += a; index1 += b; type1 += c
+	temp['Val'] = val1
+	temp['Index'] = index1
+	temp['Types'] = type1
+	df_mod_train = pd.DataFrame()
+	for idx in temp['Index'].unique().tolist():
+		df_mod_train[idx] = temp.loc[temp['Index']==idx]['Val'].reset_index(drop=True)
+	df_mod_train['Types'] = temp.loc[temp['Index']==idx]['Types'].reset_index(drop=True)
+	df_mod_train = df_mod_train.dropna()
+	return df_mod_train
+
 def test(arr1, arr2, cloud_mask, arr3 = None, dem_arr = None):
 	cloud_mask1 = cloud_mask==1
 	temp = pd.DataFrame()
@@ -160,6 +206,36 @@ def test(arr1, arr2, cloud_mask, arr3 = None, dem_arr = None):
 		#ndwi
 		a,b = classify('ndwi',ndwi,cloud_mask,1)
 		val1 += a; index1 += b
+	if dem_arr is not None:
+		#dem
+		a,b = classify('dem',dem_arr,cloud_mask,1)
+		val1 += a; index1 += b
+	temp['Val'] = val1
+	temp['Index'] = index1
+	df_mod_test = pd.DataFrame()
+	for idx in temp['Index'].unique().tolist():
+		df_mod_test[idx] = temp.loc[temp['Index']==idx]['Val'].reset_index(drop=True)
+	df_mod_test = df_mod_test.dropna()
+	return df_mod_test
+
+def test2(arr1, arr2, cloud_mask, dem_arr = None):
+	cloud_mask1 = cloud_mask==1
+	temp = pd.DataFrame()
+	val1 = []
+	index1 = []
+	#b2-b1
+	min1 = np.ones(arr1.shape)*-99
+	min1[cloud_mask1] = arr2[cloud_mask1] - arr1[cloud_mask1]
+	#ndvi
+	ndvi = np.ones(arr1.shape)*-99
+	sum1 = arr2 + arr1
+	ndvi[cloud_mask1] = min1[cloud_mask1]/sum1[cloud_mask1].astype(np.float)
+	#band2
+	a,b = classify('Band2',arr2,cloud_mask,1)
+	val1 += a; index1 += b
+	#ndvi
+	a,b = classify('ndvi',ndvi,cloud_mask,1)
+	val1 += a; index1 += b
 	if dem_arr is not None:
 		#dem
 		a,b = classify('dem',dem_arr,cloud_mask,1)
@@ -226,95 +302,15 @@ def catValidation(ref_arr, mod_arr, type_name, mask, w=1, l=0):
 	res_arr[mask] = hit_arr+miss_arr*2+false_arr*3
 	return val, type, im_type, res_arr
 
-def ReprojectNClip(headers):
-	ds0 = gdal.Open(headers['MWP'][0])
-	ulx0, xres0, xskew0, uly0, yskew0, yres0 = ds0.GetGeoTransform()
-	lrx0 = ulx0 + ds0.RasterXSize*xres0
-	lry0 = uly0 + ds0.RasterYSize*yres0
-	extend = [str(ulx0), str(uly0), str(lrx0), str(lry0)]
-	for header in ['LC08','MOD09GQ','MYD09GQ','MWP']:
-		# first reproject files to epsg:4326
-		hfiles = headers[header]
-		if header == 'LC08':
-			ds = gdal.Open(hfiles[0])
-			prj = ds.GetProjection()
-			srs = osr.SpatialReference(wkt=prj)
-			epsg = srs.GetAttrValue("AUTHORITY",1)
-			for hfile in hfiles:
-				rpj_file = file_path+'reprojected/'+os.path.basename(hfile)
-				if not os.path.isfile(rpj_file):
-					cmd1 = 'gdalwarp -overwrite -s_srs EPSG:'+epsg+' -t_srs EPSG:4326 -r cubic '+hfile+' '+rpj_file
-					os.system(cmd1)
-				ds0 = gdal.Open(rpj_file)
-				ulx, xres, xskew, uly, yskew, yres = ds0.GetGeoTransform()
-				lrx = ulx + ds0.RasterXSize*xres
-				lry = uly + ds0.RasterYSize*yres
-				a0 = np.array([ulx0,uly0,lrx0,lry0])
-				a_new = np.array([ulx,uly,lrx,lry])
-				compare_extend = np.array([ulx0<ulx,uly0>uly,lrx0>lrx,lry0<lry])
-				#compare between landsat and mwp
-				if all(compare_extend):
-					extend = [str(ulx), str(uly), str(lrx), str(lry)]
-					os.system('cp '+rpj_file+' '+file_path+'clipped/.')
-				else:
-					a_new[compare_extend==False] = a0[compare_extend==False]
-					extend = [str(x) for x in a_new.tolist()]
-					clipped_file = file_path+'clipped/'+os.path.basename(hfile)
-					if not os.path.isfile(clipped_file):
-						cmd2 = 'gdal_translate -projwin '+' '.join(extend)+' '+rpj_file+' '+clipped_file
-						os.system(cmd2)
-		elif header in ['MOD09GQ','MYD09GQ']:
-			tr = 0.00219684
-			for hfile in hfiles:
-				rpj_file = file_path+'reprojected/'+os.path.basename(hfile)
-				clipped_file = file_path+'clipped/'+os.path.basename(hfile)
-				hname, hext = os.path.splitext(hfile)
-				if hext == '.tif':
-					if not os.path.isfile(rpj_file):
-						cmd3 = 'gdalwarp -overwrite -t_srs "+proj=longlat +datum=WGS84 +no_defs" -dstnodata -28672 -r cubic -tr '+str(tr)+' '+str(tr)+' -ot Int16 -of GTiff '+hfile+' '+rpj_file
-						os.system(cmd3)
-					#clip to landsat extend
-					if not os.path.isfile(clipped_file):
-						cmd4 = 'gdal_translate -projwin '+' '.join(extend)+' '+rpj_file+' '+clipped_file
-						os.system(cmd4)
-				elif hext == '.hdf':
-					for b in ['b01','b02']:
-						dt0 = datetime.strptime(file_path[:-1].split('/')[-1],'%Y-%m-%d')
-						hdf_files_b = 'HDF4_EOS:EOS_GRID:'+hfile+':MODIS_Grid_2D:sur_refl_'+b+'_1'
-						#moisac hdf files
-						vrt_file = file_path+hname.split('/')[-1]+b+'.vrt'
-						if not os.path.isfile(vrt_file):
-							os.system('gdalbuildvrt '+vrt_file+' '+hdf_files_b)
-						#convert and reproject vrt file to geotiff
-						tif_file = file_path+header+'.A'+dt0.strftime('%Y%j')+'_'+b+'.tif'
-						if not os.path.isfile(tif_file):
-							cmd5 = 'gdalwarp -overwrite -t_srs "+proj=longlat +datum=WGS84 +no_defs" -dstnodata -28672 -r cubic -tr '+str(tr)+' '+str(tr)+' -ot Int16 -of GTiff '+vrt_file+' '+tif_file
-							os.system(cmd5)
-						clipped_file1 = file_path+'clipped/'+os.path.basename(tif_file)
-						if not os.path.isfile(clipped_file1):
-							cmd6 = 'gdal_translate -projwin '+' '.join(extend)+' '+tif_file+' '+clipped_file1
-							os.system(cmd6)
-		else:
-			#tr = 0.00219684
-			#only need to clip the MWP file
-			for hfile in hfiles:
-				clipped_file2 = file_path+'clipped/'+os.path.basename(hfile)
-				if not os.path.isfile(clipped_file2):
-					cmd7 = 'gdal_translate -projwin '+' '.join(extend)+' '+hfile+' '+clipped_file2
-					os.system(cmd7)
-	
-	with open(file_path+'clipped/extend.txt','w') as fo:
-		fo.write(' '.join(extend))
-
-def ClassifyMODIS(arr1,arr2,dem_arr,rf):
+def ClassifyMODIS(arr1,arr2,rf):
 	cloud_mask = np.logical_and(arr1+arr2 !=0,
 								np.logical_and(np.logical_and(arr2!=-28672,arr1!=-28672),
-								np.logical_and(arr1!=0,arr1<1150))).astype(np.int)
+								np.logical_and(arr1!=0,arr1<2500))).astype(np.int)
 	if len(np.unique(cloud_mask))==1:
 		return
-	MODClassTest = test(arr1, arr2, cloud_mask, None, dem_arr)
+	MODClassTest = test(arr1, arr2, cloud_mask)
 	#random forest predict
-	features = list(MODClassTest.columns[:6])
+	features = list(MODClassTest.columns[:5])
 	X2 = MODClassTest[features]
 	y2_test = rf.predict(X2)
 	res_arr = np.ones(arr1.shape)*-1
@@ -324,6 +320,39 @@ def ClassifyMODIS(arr1,arr2,dem_arr,rf):
 		return
 	return res_arr
 
+def LearnMore(d1,d2,water_mask):
+	#loop between days to modis files
+	ndays = (d2-d1).days
+	arr1 = np.array([]).reshape(0,water_mask.shape[0],water_mask.shape[1])
+	arr2 = np.array([]).reshape(0,water_mask.shape[0],water_mask.shape[1])
+	for i in range(ndays+1):
+		currD = d1+timedelta(days=i)
+		mFiles = sorted(glob('clipped_data/MOD09GQ.A'+currD.strftime('%Y%m%d')+'_b0[12].tif'))
+		if len(mFiles) <2:
+			continue
+		temp_arr1 = gdal.Open(mFiles[0]).ReadAsArray()
+		temp_arr2 = gdal.Open(mFiles[1]).ReadAsArray()
+		arr1 = np.vstack([arr1,temp_arr1[np.newaxis,:,:]])
+		arr2 = np.vstack([arr2,temp_arr2[np.newaxis,:,:]])
+		
+	cloud_mask = np.logical_and(arr2>0,
+								np.logical_and(arr1<2500,arr1>0)).astype(np.int)
+	if len(np.unique(cloud_mask))==1:
+		return
+	new_water_mask = np.repeat(water_mask[np.newaxis,:,:],ndays+1,axis=0)
+	MODClassTrain = train(arr1, arr2, cloud_mask, new_water_mask)
+	#random forest train
+	y = MODClassTrain['Types']
+	features = list(MODClassTrain.columns[:2])
+	#features = ['Band2']
+	X = MODClassTrain[features]
+	class_weight = {1:0.7,0:0.3}
+	dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,n_jobs=-1)
+	dt.fit(X,y)
+	joblib.dump(dt,'dt_2013.joblib.pkl',compress=9)
+	return dt
+
+"""
 def WriteMODIS(d0,d1,refl_vi):
 	t = d1.strftime('%Y%m%d')
 	ndays, nr, nc = refl_vi.shape
@@ -338,49 +367,6 @@ def WriteMODIS(d0,d1,refl_vi):
 	#file MYD
 	myd_arr = refl_vi[td*2+1,:,:]
 	createTif('Cloud_free/MYD_FM'+t+'.tif', myd_arr, ds.GetGeoTransform())
-
-def ReclassifyMODIS(arr1,arr2,water_mask,dem_arr=None,random_state=None):
-	return
-	n_pix_water = np.sum(water_mask==1)
-	if n_pix_water < 100:
-		return
-	#random select land pixels
-	xx,yy = np.where(np.logical_and(water_mask==0,np.logical_and(arr2>3000,arr1<1700)))
-	xx1,yy1 = np.where(water_mask==1)
-	pix_land = np.random.randint(0,xx.shape[0],n_pix_water).tolist()
-	pix_water_discard = np.random.randint(0,xx1.shape[0],n_pix_water/4).tolist()
-	for pix in pix_land:
-		water_mask[xx[pix],yy[pix]] = 2
-	for pix1 in pix_water_discard:
-		water_mask[xx1[pix1],yy1[pix1]] = 0
-	cloud_mask = np.logical_and(arr2>0,
-								np.logical_and(arr1<1700,arr1>0)).astype(np.int)
-	cloud_mask_test = np.logical_and(cloud_mask==1,np.logical_and(water_mask!=2,water_mask!=1))
-	if len(np.unique(cloud_mask))==1:
-		return
-	MODClassTrain = train(arr1, arr2, cloud_mask, water_mask, 2, None, dem_arr)
-	MODClassTest = test(arr1, arr2, cloud_mask_test, None, dem_arr)
-	#random forest train
-	y = MODClassTrain['Types']
-	features = list(MODClassTrain.columns[:5])
-	#features = ['Band2']
-	X = MODClassTrain[features]
-	class_weight = {1:0.7,0:0.3}
-	dt = RandomForestClassifier(class_weight=class_weight,n_jobs=-1,random_state=random_state)
-	dt.fit(X,y)
-	#random forest predict
-	X2 = MODClassTest[features]
-	y2_test = dt.predict(X2)
-	res_arr = np.ones(arr1.shape)*-1
-	try:
-		res_arr[cloud_mask_test] = y2_test
-		res_arr[water_mask==1] = 1
-		res_arr[water_mask==2] = 0
-		if dem_arr is not None:
-			res_arr[np.logical_and(dem_arr>195,res_arr==1)] = 0
-	except:
-		return
-	return res_arr
 
 def Landsat8Training(collected_sample, landsat_image):
 	collected_sample_arr = gdal.Open(collected_sample).ReadAsArray()
@@ -443,10 +429,10 @@ def Landsat8Classify(date0,dt_tm):
 	features1 = list(landsatClass.columns[:6])
 	X_test = landsatClass[features1]
 	y_test = dt_tm.predict(X_test)
-	landsat_dem = gdal.Open('Landsat/landsat_dem.tif').ReadAsArray()
+#	landsat_dem = gdal.Open('Landsat/landsat_dem.tif').ReadAsArray()
 	res_arr_tm = np.ones(arr_red.shape)*-99
 	res_arr_tm[legal_arr_tm] = y_test
-	res_arr_tm[np.logical_and(res_arr_tm==1,landsat_dem>=250)] = 0
+#	res_arr_tm[np.logical_and(res_arr_tm==1,landsat_dem>=250)] = 0
 	createTif('Landsat/Landsat_'+date0.strftime('%Y%m%d')+'_bin.tif', 
 				res_arr_tm, 
 				geom_tm, 
@@ -476,9 +462,6 @@ def Landsat7Classify(date0,dt_tm):
 				geom_tm, 
 				gdal.GDT_Int16)
 
-def ResampleLandsat(img,img1):
-	os.system('gdalwarp -overwrite -r cubicspline -srcnodata -99 -dstnodata -99 -tr 0.00219619 0.00219619 '+img+' '+img1)
-
 def LandsatValidation(d0,arr_mod,arr_tm,arr_mod_flood=None):
 	results = pd.DataFrame()
 	if arr_mod_flood is None:
@@ -490,7 +473,7 @@ def LandsatValidation(d0,arr_mod,arr_tm,arr_mod_flood=None):
 		results['Types'] = type_mod
 		results['Values'] = val_mod
 		return results, res_mod
-	nan_arr_mod = np.logical_or(np.logical_or(arr_mod==-1,arr_mod_flood==0),arr_tm==-99).astype(np.int)
+	nan_arr_mod = (arr_tm==-99).astype(np.int)
 	val_mod, type_mod, im_mod, res_mod = catValidation(arr_tm, arr_mod, 'MOD',
 														nan_arr_mod==0)
 	#for mod flood images
@@ -502,31 +485,55 @@ def LandsatValidation(d0,arr_mod,arr_tm,arr_mod_flood=None):
 	results['Types'] = type_mod+type_modf
 	results['Values'] = val_mod+val_modf
 	return results, res_mod, res_modf
-
-def LandsatValidationEF5(d0,arr_mod,arr_tm,arr_mod_flood=None):
+"""
+def LandsatValidationEF5(d0,arr0,arr1,arr2):
 	results = pd.DataFrame()
-	if arr_mod_flood is None:
-		nan_arr_mod = np.logical_or(arr_mod==-1,arr_tm==-99).astype(np.int)
-		val_mod, type_mod, im_mod, res_mod = catValidation(arr_tm, arr_mod, 'MOD',
+	nan_arr_mod = (arr0==-99).astype(np.int)
+	val_cf, type_cf, im_cf, res_cf = catValidation(arr0, arr1, 'EF5',
 														nan_arr_mod==0)
-		results['Date'] = [d0.strftime('%Y-%m-%d')]*7
-		results['Im_type'] = im_mod
-		results['Types'] = type_mod
-		results['Values'] = val_mod
-		return results, res_mod
-	nan_arr_mod = np.logical_or(arr_mod==-1,arr_tm==-99).astype(np.int)
-	val_mod, type_mod, im_mod, res_mod = catValidation(arr_tm, arr_mod, 'MOD',
-														nan_arr_mod==0)
-	#for mod flood images
-	val_modf, type_modf, im_modf, res_modf = catValidation(arr_tm, arr_mod_flood, 'EF5',
+	val_mod, type_mod, im_mod, res_mod = catValidation(arr0, arr2, 'EF5_noncali',
 														nan_arr_mod==0)
 	date1 = [d0.strftime('%Y-%m-%d')]*14
 	results['Date'] = date1
-	results['Im_type'] = im_mod+im_modf
-	results['Types'] = type_mod+type_modf
-	results['Values'] = val_mod+val_modf
-	return results, res_mod, res_modf
+	results['Im_type'] = im_cf+im_mod
+	results['Types'] = type_cf+type_mod
+	results['Values'] = val_cf+val_mod
+	return results, res_cf, res_mod
 
+
+def ResampleImage(img,img1,resolution,bounding_box,srcnodata=-99):
+	if srcnodata:
+		os.system('gdalwarp -overwrite -r cubicspline -srcnodata '+str(srcnodata)+' -dstnodata -99 -tr '+\
+					str(resolution)+' '+str(resolution)+\
+					' -te '+' '.join([str(x) for x in bounding_box])+' '+img+' '+img1)
+	else:
+		os.system('gdalwarp -overwrite -r cubicspline -tr '+\
+					str(resolution)+' '+str(resolution)+\
+					' -te '+' '.join([str(x) for x in bounding_box])+' '+img+' '+img1)
+
+def init(d0_, rf_):
+	global d0, rf
+	d0 = d0_
+	rf = rf_
+
+def ClassifyMultiple(i):
+	d1 = d0+timedelta(days=i)
+	mod_files = sorted(glob('clipped_data/MOD09GQ.A'+d1.strftime('%Y%m%d')+'_b0[12].tif'))
+	if not mod_files or len(mod_files)<2:
+		return
+	if os.path.isfile('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif'):
+		return
+	try:
+		ds1 = gdal.Open(mod_files[0])
+		geom = ds1.GetGeoTransform()
+		mod_band1 = ds1.ReadAsArray()
+		mod_band2 = gdal.Open(mod_files[1]).ReadAsArray()
+		res_arr_mod0 = ClassifyMODIS(mod_band1,mod_band2,rf)
+		createTif('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif', res_arr_mod0, geom)
+	except:
+		print d1
+
+"""
 file_path = sys.argv[1]
 
 if os.path.isdir(file_path+'reprojected/') == False:
@@ -544,10 +551,12 @@ for f in all_files:
 			headers[header].append(f)
 
 ReprojectNClip(headers)
-
-rf = joblib.load('rf7.joblib.pkl')
-#rf = joblib.load('rf_new7.joblib.pkl')
-
+"""
+#rf = joblib.load('rf7.joblib.pkl')
+rf = joblib.load('rf_new7.joblib.pkl')
+#LearnMore(date(2013,6,30),date(2013,6,30),
+#				gdal.Open('elevation/swbd_mississippi_reprojected.tif').ReadAsArray())
+"""
 d0 = date(2012,5,18)
 tm_path = 'Landsat/'
 for i in range(1,130):
@@ -563,28 +572,38 @@ for i in range(1,130):
 	dt_tm = Landsat8Training(tm_path+'collected_samples.tif',
 			tm_path+'LC08_LC01_*'+d1.strftime("%Y%m%d"))
 	Landsat8Classify(d1,dt_tm)
+"""
 
 d0 = date(2013,6,1)
-dem_arr = gdal.Open('elevation/dem2.tif').ReadAsArray()
-for i in range(190):
-	d1 = d0+timedelta(days=i)
-	mod_files = sorted(glob('clipped_data/MOD09GQ.A'+d1.strftime('%Y%m%d')+'_b0[12].tif'))
-	if mod_files:
-		if os.path.isfile('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif'):
-			continue
-		ds1 = gdal.Open(mod_files[0])
-		geom = ds1.GetGeoTransform()
-		mod_band1 = ds1.ReadAsArray()
-		mod_band2 = gdal.Open(mod_files[1]).ReadAsArray()
-		res_arr_mod0 = ClassifyMODIS(mod_band1,mod_band2,dem_arr,rf)
-		try:
-			createTif('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif',
-						res_arr_mod0, geom)
-		except:
-			pass
+p = mp.Pool()
+p.map(ClassifyMultiple, range(50))
+"""
+d = date(2013,4,1)
+temp_water_mask = np.array([]).reshape(0,1494,1836)
+arr1_stack = np.array([]).reshape(0,1494,1836)
+arr2_stack = np.array([]).reshape(0,1494,1836)
+for i in range(90):
+	d2 = d+timedelta(days=i)
+	if os.path.isfile('results/MOD_'+d2.strftime('%Y%m%d')+'_bin.tif'):
+		temp_arr = gdal.Open('results/MOD_'+d2.strftime('%Y%m%d')+'_bin.tif').ReadAsArray()
+		temp_arr1 = gdal.Open('clipped_data/MOD09GQ.A'+d2.strftime('%Y%m%d')+'_b01.tif').ReadAsArray()
+		temp_arr2 = gdal.Open('clipped_data/MOD09GQ.A'+d2.strftime('%Y%m%d')+'_b02.tif').ReadAsArray()
+		temp_water_mask = np.vstack([temp_water_mask,temp_arr[np.newaxis,:,:]])
+		arr1_stack = np.vstack([arr1_stack,temp_arr1[np.newaxis,:,:]])
+		arr2_stack = np.vstack([arr2_stack,temp_arr2[np.newaxis,:,:]])
 
+dt = LearnMore(arr1_stack,arr2_stack,temp_water_mask)
+rf.estimators_ += dt.estimators_
+rf.n_estimators = len(rf.estimators_)
+arr1=gdal.Open('clipped_data/MOD09GQ.A20130630_b01.tif').ReadAsArray()
+arr2=gdal.Open('clipped_data/MOD09GQ.A20130630_b02.tif').ReadAsArray()
+new_res_arr = ClassifyMODIS(arr1,arr2,dt)
+createTif('test1.tif',new_res_arr,geom)
+
+"""
+"""
 d0 = date(2011,3,29)
-dem_arr = gdal.Open('elevation/dem1.tif').ReadAsArray()
+dem_arr = gdal.Open('elevation/upstream_mississippi.tif').ReadAsArray()
 tot_res = pd.DataFrame()
 for i in range(300):
 	d1 = d0+timedelta(days=i)
@@ -644,54 +663,192 @@ for i in range(300):
 	tot_res = tot_res.append(pd_res, ignore_index=True)
 
 tot_res.to_csv('data.csv',index=False)
-
+"""
 #output from model
-d0 = date(2012,5,18)
-dem_arr = gdal.Open('elevation/dem1.tif').ReadAsArray()
+d0 = date(2013,6,14)
+water_mask = gdal.Open('elevation/swbd_mississippi.tif').ReadAsArray()
 tot_res = pd.DataFrame()
-for i in range(441):
-	d1 = d0+timedelta(days=i)
+for d1 in [date(2013,6,7),date(2013,7,16),date(2013,7,25),
+			date(2013,8,1),date(2013,8,10),date(2013,8,26),
+			date(2014,7,28),date(2014,8,13),date(2014,8,29)]:
 	#landsat bin file
 	tm_files = glob('Landsat/Landsat_'+d1.strftime('%Y%m%d')+'_bin.tif')
 	if not tm_files:
 		continue
 	tm_file = tm_files[0]
-	tm_resampled_file = tm_file.split('.')[0]+'_resampled.tif'
-#	ResampleLandsat(tm_file,tm_resampled_file)
-	ds_tm = gdal.Open(tm_resampled_file)
-	geom = ds_tm.GetGeoTransform()
+	tm_resampled_file = 'validation/clipped_files/'+os.path.basename(tm_file)
+	ds_tm = gdal.Open(tm_file)
+	geom_tm = ds_tm.GetGeoTransform()
 	arr_tm = ds_tm.ReadAsArray()
-	#modis classified bin file
-	mod_files = sorted(glob('clipped_data/M[OY]D09GQ.A'+d1.strftime('%Y%m%d')+'_b0[12].tif'))
-	mod_band1 = gdal.Open(mod_files[0]).ReadAsArray()
-	mod_band2 = gdal.Open(mod_files[1]).ReadAsArray()
-	res_arr_mod0 = ClassifyMODIS(mod_band1,mod_band2,dem_arr,rf)
+	bb_tm = [geom_tm[0],geom_tm[3]-arr_tm.shape[0]*geom_tm[1],
+				geom_tm[0]+arr_tm.shape[1]*geom_tm[1],geom_tm[3]]
+	
+	#NASA flood map file
+	mwp_file = glob('mwp/MWP_'+d1.strftime('%Y%j')+'*.tif')[0]
+	clipped_mwp_file = 'validation/clipped_files/'+os.path.basename(mwp_file)
+	ds_mwp = gdal.Open(mwp_file)
+	geom_mwp = ds_mwp.GetGeoTransform()
+	arr_mwp = ds_mwp.ReadAsArray()
+	bb_mwp = [geom_mwp[0],geom_mwp[3]-arr_mwp.shape[0]*geom_mwp[1],
+				geom_mwp[0]+arr_mwp.shape[1]*geom_mwp[1],geom_mwp[3]]
+	#final bb
+	bb = [max(bb_tm[0],bb_mwp[0]),max(bb_tm[1],bb_mwp[1]),
+			min(bb_tm[2],bb_mwp[2]),min(bb_tm[3],bb_mwp[3])]
+	
+	#ResampleLandsat
+	ResampleImage(tm_file,tm_resampled_file,0.00219684,bb_tm)
+	ResampleImage(mwp_file,clipped_mwp_file,0.00219684,bb,None)
+	#modis cloud free file
+	ds_mod = gdal.Open('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif')
+	geom_mod = ds_mod.GetGeoTransform()
+	cloud_free_arr = np.load('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.npy')
+	cloud_free_file = 'Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.tif'
+	createTif(cloud_free_file,cloud_free_arr,geom_mod)
+	cloud_free_file_clipped = 'validation/clipped_files/'+os.path.basename(cloud_free_file)
+	ResampleImage(cloud_free_file,cloud_free_file_clipped,0.00219684,bb)
 	#model file
-	model_file = glob('ef5/mississippi_flood_map/output/depth.'+
-						d1.strftime('%Y%m%d')+'_*.tif')[0]
-	if not model_file:
-		pd_res, res_mod = LandsatValidation(d1,res_arr_mod0,arr_tm)
-	else:
-		clipped_model_file = 'results/depth.'+d1.strftime('%Y%m%d')+'.tif'
-#		os.system('gdal_translate -projwin -92.3 44.3 -89.5 42.25 '+model_file+' '+
-#					clipped_model_file)
-		arr_mod_flood = gdal.Open(clipped_model_file).ReadAsArray() > 0.25
-		arr_mod_flood = arr_mod_flood.astype(np.uint)
-		pd_res, res_mod,res_modf = LandsatValidationEF5(d1,res_arr_mod0,arr_tm,arr_mod_flood)
-		createTif('results/res_mod_'+d1.strftime('%Y%m%d')+'.tif',res_mod,geom)
-		createTif('results/res_modf_'+d1.strftime('%Y%m%d')+'.tif',res_modf,geom)
+#	model_file = glob('ef5/mississippi_flood_map/output/depth.'+
+#						d1.strftime('%Y%m%d')+'_*.tif')[0]
+#	arr_model = gdal.Open(model_file).ReadAsArray()[44:-463,128:-637]
+#	arr_model[np.logical_and(water_mask<1,arr_model<8)] = 0
+#	arr_model[arr_model>0]=1
+#	arr_model[arr_model<0]=0
+#	model_file_mod = 'ef5/mississippi_flood_map/output/mod_'+os.path.basename(model_file)
+#	model_file_clipped = 'validation/clipped_files/'+os.path.basename(model_file)
+#	createTif(model_file_mod,arr_model,geom_mod)
+#	ResampleImage(model_file_mod,model_file_clipped,0.005,bb_tm)
+	#model file no calibration
+#	model_file1 = glob('ef5/mississippi_flood_map/output1/depth.'+
+#						d1.strftime('%Y%m%d')+'_*.tif')[0]
+#	arr_model1 = gdal.Open(model_file1).ReadAsArray()[44:-463,128:-637]
+#	arr_model1[arr_model1>0.5]=1
+#	arr_model1[arr_model1<0]=0
+#	model_file_mod1 = 'ef5/mississippi_flood_map/output1/mod_'+os.path.basename(model_file)
+#	model_file_clipped1 = 'validation/clipped_files/'+os.path.basename(model_file).split('.tif')[0]+'01.tif'
+#	createTif(model_file_mod1,arr_model1,geom_mod)
+#	ResampleImage(model_file_mod1,model_file_clipped1,0.005,bb_tm)
+	tm_ds = gdal.Open('validation/clipped_files/Landsat_'+d1.strftime('%Y%m%d')+'_bin.tif')
+	geom = tm_ds.GetGeoTransform()
+	tm_val = tm_ds.ReadAsArray()
+	#cf_val = gdal.Open('validation/clipped_files/MOD_CF_'+d1.strftime('%Y%m%d')+'.tif').ReadAsArray()
+	#mwp_val = gdal.Open(glob('validation/clipped_files/MWP_'+d1.strftime('%Y%j')+'*.tif')[0]).ReadAsArray()
+#	mod_val = gdal.Open('validation/clipped_files/depth.'+d1.strftime('%Y%m%d')+'_0000.simpleinundation.tif').ReadAsArray()
+#	mod_val1 = gdal.Open('validation/clipped_files/depth.'+d1.strftime('%Y%m%d')+'_0000.simpleinundation01.tif').ReadAsArray()
+#	pd_res, res_cf, res_mod = LandsatValidationEF5(d1,tm_val,mod_val,mod_val1)
+	#createTif('validation/CF_'+d1.strftime('%Y%m%d')+'_cat.tif',res_cf,geom)
+	#createTif('validation/MWP_'+d1.strftime('%Y%m%d')+'_cat.tif',res_mwp,geom)
+	mod_val = gdal.Open(cloud_free_file_clipped).ReadAsArray()
+	modf_val = gdal.Open(clipped_mwp_file).ReadAsArray()
+	pd_res, res_mod, res_modf = LandsatValidation(d1,mod_val,tm_val,modf_val)
+	res_modf[modf_val==0]=-1
+	createTif('validation/MWP_'+d1.strftime('%Y%m%d')+'_cat.tif',res_modf,geom)
+	createTif('validation/CF_'+d1.strftime('%Y%m%d')+'_cat.tif',res_mod,geom)
 	tot_res = tot_res.append(pd_res, ignore_index=True)
 
-tot_res.to_csv('model_vs_modis1.csv',index=False)
+tot_res.to_csv('model_vs_modis2.csv',index=False)
 
-#Write cloud free modis
-t_mid = date(2014,7,28)
-#refl_vi = scipy.io.loadmat('refl_vi'+t_mid.strftime('%Y%m%d')+'.mat')['refl_vi'+t_mid.strftime('%Y%m%d')]
-#WriteMODIS(date(2013,8,2),t_mid,refl_vi)
-LandsatBin = glob('Landsat/Landsat_'+t_mid.strftime('%Y%m%d')+'_bin.tif')[0]
-LandsatResampled = LandsatBin.split('.')[0]+'_resampled.tif'
-#ResampleLandsat(LandsatBin, LandsatResampled)
-pd_res = LandsatValidationMODIS(t_mid,'MOD','OK')
-pd_res1 = LandsatValidationMODIS(t_mid,'MYD','OK')
-pd_res
-pd_res1
+#train model
+tot_res = pd.DataFrame()
+for d1 in [date(2013,6,7),date(2013,7,16),date(2013,7,25),
+			date(2013,8,1),date(2013,8,10),date(2013,8,26),
+			date(2014,7,28),date(2014,8,13),date(2014,8,29)]:
+	#landsat bin file
+	tm_files = glob('Landsat/Landsat_'+d1.strftime('%Y%m%d')+'_bin.tif')
+	if not tm_files:
+		continue
+	tm_file = tm_files[0]
+	tm_resampled_file = 'validation/clipped_files/'+os.path.basename(tm_file)
+	ds_tm = gdal.Open(tm_file)
+	geom_tm = ds_tm.GetGeoTransform()
+	arr_tm = ds_tm.ReadAsArray()
+	bb_tm = [geom_tm[0],geom_tm[3]-arr_tm.shape[0]*geom_tm[1],
+				geom_tm[0]+arr_tm.shape[1]*geom_tm[1],geom_tm[3]]
+	
+	#ResampleLandsat
+	ResampleImage(tm_file,tm_resampled_file,0.005,bb_tm)
+	#modis classified file
+	ds1 = gdal.Open('clipped_data/MOD09GQ.A'+d1.strftime('%Y%m%d')+'_b01.tif')
+	geom_mod = ds1.GetGeoTransform()
+	mod_arr1 = ds1.ReadAsArray()
+	mod_arr2 = gdal.Open('clipped_data/MOD09GQ.A'+d1.strftime('%Y%m%d')+'_b02.tif').ReadAsArray()
+	new_res_arr = ClassifyMODIS(mod_arr1,mod_arr2,dt)
+	mod_class_file = 'results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif'
+	createTif(mod_class_file,new_res_arr,geom_mod)
+	mod_class_file_clipped = 'validation/clipped_files/'+os.path.basename(mod_class_file)
+	ResampleImage(mod_class_file,mod_class_file_clipped,0.005,bb_tm)
+	
+	tm_ds = gdal.Open('validation/clipped_files/Landsat_'+d1.strftime('%Y%m%d')+'_bin.tif')
+	geom = tm_ds.GetGeoTransform()
+	tm_val = tm_ds.ReadAsArray()
+	
+	mod_val = gdal.Open(mod_class_file_clipped).ReadAsArray()
+	
+	pd_res = pd.DataFrame()
+	nan_arr_mod = (tm_val==-99).astype(np.int)
+	val_cf, type_cf, im_cf, res_cf = catValidation(tm_val, mod_val, 'MOD_Classified',
+														nan_arr_mod==0)
+	date1 = [d1.strftime('%Y-%m-%d')]*7
+	pd_res['Date'] = date1
+	pd_res['Im_type'] = im_cf
+	pd_res['Types'] = type_cf
+	pd_res['Values'] = val_cf
+	
+	createTif('validation/MOD_'+d1.strftime('%Y%m%d')+'_cat.tif',res_cf,geom)
+	tot_res = tot_res.append(pd_res, ignore_index=True)
+
+#Learn More
+water_mask = np.array([]).reshape(0,350,224)
+arr1 = np.array([]).reshape(0,350,224)
+arr2 = np.array([]).reshape(0,350,224)
+
+for currD in [date(2014,7,28),date(2014,8,13),date(2014,8,29)]:
+	ds_water_mask = gdal.Open('validation/MOD_'+currD.strftime('%Y%m%d')+'_cat.tif')
+	geom_water_mask = ds_water_mask.GetGeoTransform()
+	temp_water_mask = ds_water_mask.ReadAsArray()
+	tm_val = gdal.Open('validation/clipped_files/Landsat_'+d1.strftime('%Y%m%d')+'_bin.tif').ReadAsArray()
+	bb_cat = [geom_water_mask[0],geom_water_mask[3]-temp_water_mask.shape[0]*geom_water_mask[1],
+				geom_water_mask[0]+temp_water_mask.shape[1]*geom_water_mask[1],geom_water_mask[3]]
+	
+	mFiles = sorted(glob('clipped_data/MOD09GQ.A'+currD.strftime('%Y%m%d')+'_b0[12].tif'))
+	for jk,mFile in enumerate(mFiles):
+		mFile_clipped = 'validation/clipped_files/'+os.path.basename(mFile)
+		ResampleImage(mFile,mFile_clipped,0.005,bb_cat)
+		temp_arr = gdal.Open(mFile_clipped).ReadAsArray()
+		if jk == 0:
+			arr1 = np.vstack([arr1,temp_arr[np.newaxis,:,:]])
+		elif jk == 1:
+			arr2 = np.vstack([arr2,temp_arr[np.newaxis,:,:]])
+	
+	if (len(np.unique(temp_water_mask)) < 4) or (np.sum(temp_water_mask==3)< 30):
+		temp_water_mask[temp_water_mask!=2] = -99
+		temp_water_mask[temp_water_mask==2] = 1
+		temp_water_mask[tm_val==0] = 0
+	else:
+		temp_water_mask[temp_water_mask<2] = -99
+		temp_water_mask[temp_water_mask==2] = 1
+		temp_water_mask[temp_water_mask==3] = 0
+	water_mask = np.vstack([water_mask,temp_water_mask[np.newaxis,:,:]])
+
+cloud_mask = np.logical_and(arr2>0,
+							np.logical_and(arr1<2500,arr1>0)).astype(np.int)
+MODClassTrain = train(arr1, arr2, cloud_mask, water_mask)
+#random forest train
+y = MODClassTrain['Types']
+features = list(MODClassTrain.columns[:5])
+#features = ['Band2']
+X = MODClassTrain[features]
+class_weight = {1:0.7,0:0.3}
+dt = RandomForestClassifier(n_estimators=50,class_weight=class_weight,n_jobs=-1)
+dt.fit(X,y)
+
+rf.estimators_ += dt.estimators_
+rf.n_estimators = len(rf.estimators_)
+joblib.dump(rf,'rf7_updated.joblib.pkl',compress=9)
+
+
+
+
+
+
+
+

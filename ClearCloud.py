@@ -17,6 +17,7 @@ from GetCP_from_MODIS import GetCP_from_MODIS
 from sqdistance import sqdistance
 from GetVICoef import GetVICoef
 from VarInt3d import VarInt3d
+from skimage import io
 
 def ClearCloud(oyscacld, t_start, t_end):
 	try:
@@ -24,6 +25,7 @@ def ClearCloud(oyscacld, t_start, t_end):
 	except:
 		n = 1
 		[nr, nc] = oyscacld.shape
+	mask_arr = io.imread('clipped_data/MOD09GQ.A20040101_b01.tif')
 	dn_end1 = (t_end-t_start).days+1
 	N = n*nr*nc
 	temp = np.empty((n, nr, nc))
@@ -52,8 +54,6 @@ def ClearCloud(oyscacld, t_start, t_end):
 	end1 = time.time()
 	print 'First loop of ClearCloud: '+str(end1-start1)+' s'
 	print c1.shape
-	if c1.shape[0] > 40000:
-		return 'need to divide array'
 	if (c1.size == 0) or (c1.shape[0] <= 5):
 		print 'c is empty'
 		ndays = dn_end1/2 + 1
@@ -72,7 +72,7 @@ def ClearCloud(oyscacld, t_start, t_end):
 #		sca_vi = np.zeros((n,nr,nc))
 #		for jk in range(n):
 		modi = oyscacld[7,:,:]
-		[cldr, cldc] = np.where(modi==1)
+		[cldr, cldc] = np.where(np.logical_and(modi==1,mask_arr!=-28672))
 		if cldc.size >0:
 			Pix = np.hstack([cldc.reshape(-1,1), cldr.reshape(-1,1), DIST*np.ones((len(cldr),1))])
 			result = VarInt3d(Pix, c1, coef)
@@ -85,6 +85,7 @@ def ClearCloud(oyscacld, t_start, t_end):
 #				sca_vi[jk,:,:] = modi.astype(np.int8)
 			scai = modi.astype(np.int8)
 #				continue
+		scai[mask_arr==-28672]=-99
 		end3 = time.time()
 		print 'Second loop '+str(end3-end2)+' s'
 	return scai
