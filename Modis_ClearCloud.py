@@ -10,20 +10,22 @@ import matplotlib.pyplot as plt
 from datetime import date, datetime, timedelta
 from skimage import io
 
-t_mid = date(2013,8,10)
-t_start = date(2013,8,2)
-t_end = date(2013,8,17)
+t_mid = date(2014,8,13)
+t_start = t_mid - timedelta(days=7)
+t_end = t_mid + timedelta(days=7)
 
 ndays = (t_end-t_start).days
 
-oyscacld = np.ones((ndays*2,410,328))
+dem_arr = io.imread('elevation/dem_new.tif')
+oyscacld = np.ones((ndays*2,3411,4192))
+miss = 0
 count = 0
 for i in range(ndays):
 	for pre in ['MOD','MYD']:
 		t = (t_start+timedelta(days=i)).strftime('%Y%m%d')
-		res_files = glob('results/'+pre+'_'+t+'*.tif')
+		res_files = glob('results/'+pre+'_'+t+'_bindem.tif')
 		if not res_files:
-			count += 1
+			miss += 1
 			continue
 		elif len(res_files) == 1:
 			res_file = res_files[0]
@@ -36,8 +38,8 @@ for i in range(ndays):
 		count += 1
 
 #L = scipy.ndimage.zoom(oyscacld,(1,2,2),order=0)
-
+high_lakes = np.logical_and(oyscacld==2,dem_arr>=300)
+oyscacld[high_lakes] = 0
 refl_vi = ClearCloud(oyscacld, t_start, t_end)
-
-scipy.io.savemat('refl_in'+t_mid.strftime('%Y%m%d')+'.mat',mdict={'refl_in'+t_mid.strftime('%Y%m%d'):oyscacld})
-scipy.io.savemat('refl_vi'+t_mid.strftime('%Y%m%d')+'.mat',mdict={'refl_vi'+t_mid.strftime('%Y%m%d'):refl_vi})
+refl_vi[high_lakes[ndays,:,:]] = 1
+scipy.io.savemat('Cloud_free/refl_vi'+t_mid.strftime('%Y%m%d')+'.mat',mdict={'refl_vi'+t_mid.strftime('%Y%m%d'):refl_vi})

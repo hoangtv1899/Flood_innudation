@@ -696,16 +696,16 @@ for d1 in [date(2013,6,7),date(2013,7,16),date(2013,7,25),
 			min(bb_tm[2],bb_mwp[2]),min(bb_tm[3],bb_mwp[3])]
 	
 	#ResampleLandsat
-	ResampleImage(tm_file,tm_resampled_file,0.00219684,bb_tm)
-	ResampleImage(mwp_file,clipped_mwp_file,0.00219684,bb,None)
+	ResampleImage(tm_file,tm_resampled_file,0.00219,bb_tm)
+	ResampleImage(mwp_file,clipped_mwp_file,0.00219,bb,None)
 	#modis cloud free file
-	ds_mod = gdal.Open('results/MOD_'+d1.strftime('%Y%m%d')+'_bin.tif')
+	ds_mod = gdal.Open('results/MOD_'+d1.strftime('%Y%m%d')+'_bindem.tif')
 	geom_mod = ds_mod.GetGeoTransform()
-	cloud_free_arr = np.load('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.npy')
+	cloud_free_arr = scipy.io.loadmat('Cloud_free/refl_vi'+d1.strftime('%Y%m%d')+'.mat')['refl_vi'+d1.strftime('%Y%m%d')]
 	cloud_free_file = 'Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.tif'
 	createTif(cloud_free_file,cloud_free_arr,geom_mod)
 	cloud_free_file_clipped = 'validation/clipped_files/'+os.path.basename(cloud_free_file)
-	ResampleImage(cloud_free_file,cloud_free_file_clipped,0.00219684,bb)
+	ResampleImage(cloud_free_file,cloud_free_file_clipped,0.00219,bb)
 	#model file
 #	model_file = glob('ef5/mississippi_flood_map/output/depth.'+
 #						d1.strftime('%Y%m%d')+'_*.tif')[0]
@@ -745,7 +745,7 @@ for d1 in [date(2013,6,7),date(2013,7,16),date(2013,7,25),
 	createTif('validation/CF_'+d1.strftime('%Y%m%d')+'_cat.tif',res_mod,geom)
 	tot_res = tot_res.append(pd_res, ignore_index=True)
 
-tot_res.to_csv('model_vs_modis2.csv',index=False)
+tot_res.to_csv('model_vs_modis4.csv',index=False)
 
 #train model
 tot_res = pd.DataFrame()
@@ -845,7 +845,32 @@ rf.estimators_ += dt.estimators_
 rf.n_estimators = len(rf.estimators_)
 joblib.dump(rf,'rf7_updated.joblib.pkl',compress=9)
 
-
+#set threshold for water
+t0 = date(2013,5,31)
+#t0 = date(2014,7,21)
+list_days = [(t0+timedelta(days=i)).strftime('%Y%m%d') for i in range(94)]
+#list_days = [(t0+timedelta(days=i)).strftime('%Y%m%d') for i in range(45)]
+dem_arr = gdal.Open('elevation/dem_new.tif').ReadAsArray()
+for d in list_days:
+	for pre in ['MOD','MYD']:
+		arr1 = gdal.Open('clipped_data/'+pre+'09GQ.A'+d+'_b01.tif').ReadAsArray()
+		arr2 = gdal.Open('clipped_data/'+pre+'09GQ.A'+d+'_b02.tif').ReadAsArray()
+#		arr2_filter = scipy.ndimage.percentile_filter(arr2,20,2,
+#														mode='constant',cval=-28672)
+#		arr2_inter0 = scipy.ndimage.zoom(arr2, 0.5, order=3)
+#		arr2_inter = scipy.ndimage.zoom(arr2_inter0, 2, order=1)
+#		arr2_inter = arr2_inter[:arr2.shape[0],:arr2.shape[1]]
+		cloud_mask = np.logical_or(arr2 <0, np.logical_or(arr1<0,arr1>2500))
+#		res_arr = (np.logical_and(arr2_filter<2000,
+#									arr2_inter<=1200)).astype(np.int)
+		arr2_flat = arr2[cloud_mask!=True]
+		percentile5 = np.percentile(arr2_flat,5)
+		res_arr = (arr2 <= percentile5).astype(np.int)
+		res_arr[cloud_mask] = -1
+		res_arr[np.logical_and(dem_arr>=300,cloud_mask)]=0
+		res_arr[dem_arr==-99]=-99
+		createTif('results/'+pre+'_'+d+'_bindem.tif',res_arr,geom)
+		
 
 
 

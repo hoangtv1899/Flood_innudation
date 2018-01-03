@@ -31,7 +31,7 @@ def GetVICoef(c,h,lambda1):
 	end2 = time.time()
 	print str(end2-end1)+' s'
 #	coef1 = LA.lsmr(lMatrix2,y,damp=1e-3,atol=1e-8,btol=1e-8,maxiter=200)[0]
-	if nStn >= 40000:
+	if nStn >= 50000:
 		coef = LA.lsmr(lMatrix,y,damp=1e-3,atol=1e-9,btol=1e-9,maxiter=500)[0]
 	else:
 		coef = np.linalg.solve(lMatrix,y)

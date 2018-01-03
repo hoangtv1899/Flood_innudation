@@ -11,8 +11,8 @@ from ClearCloud import ClearCloud
 from glob import glob
 import scipy.ndimage
 
-d0 = date(2013,6,14)
-for i in [16,32,48,57,73]:
+d0 = date(2013,6,7)
+for i in [0,48]:
 #for i in [377,409,425,441]:
 	d1 = d0 + timedelta(days=i)
 #	if os.path.isfile('Cloud_free/MOD_CF_'+d1.strftime('%Y%m%d')+'.npy'):
