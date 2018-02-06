@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from datetime import date, datetime, timedelta
 from skimage import io
 
-t_mid = date(2014,8,13)
+t_mid = date(2013,6,7)
 t_start = t_mid - timedelta(days=7)
 t_end = t_mid + timedelta(days=7)
 

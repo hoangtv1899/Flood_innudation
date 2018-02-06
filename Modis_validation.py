@@ -846,32 +846,69 @@ rf.n_estimators = len(rf.estimators_)
 joblib.dump(rf,'rf7_updated.joblib.pkl',compress=9)
 
 #set threshold for water
-t0 = date(2013,5,31)
+t0 = date(2014,7,21)
 #t0 = date(2014,7,21)
-list_days = [(t0+timedelta(days=i)).strftime('%Y%m%d') for i in range(94)]
+list_days = [(t0+timedelta(days=i)).strftime('%Y%m%d') for i in range(47)]
 #list_days = [(t0+timedelta(days=i)).strftime('%Y%m%d') for i in range(45)]
-dem_arr = gdal.Open('elevation/dem_new.tif').ReadAsArray()
+#dem_arr = gdal.Open('elevation/dem_new.tif').ReadAsArray()
+arr0 = gdal.Open('clipped_data/MOD09GQ.A20140803_b01.tif').ReadAsArray()
+geom = gdal.Open('clipped_data/MOD09GQ.A20140803_b01.tif').GetGeoTransform()
+lons = np.tile(np.linspace(geom[0],geom[0]+geom[1]*arr0.shape[1],arr0.shape[1]),\
+																(arr0.shape[0],1))
+lats = np.tile(np.linspace(geom[3],geom[3]-geom[1]*arr0.shape[0],arr0.shape[0]).reshape(-1,1),\
+																(1,arr0.shape[1]))
+
+arrG = 360 + np.arctan(lons/lats)*180/np.pi
+A = 13.5
+B = 1081.1
+C = 0.7
+D = 2027.0
+E = 675.7
 for d in list_days:
 	for pre in ['MOD','MYD']:
+		#read data
 		arr1 = gdal.Open('clipped_data/'+pre+'09GQ.A'+d+'_b01.tif').ReadAsArray()
 		arr2 = gdal.Open('clipped_data/'+pre+'09GQ.A'+d+'_b02.tif').ReadAsArray()
-#		arr2_filter = scipy.ndimage.percentile_filter(arr2,20,2,
-#														mode='constant',cval=-28672)
-#		arr2_inter0 = scipy.ndimage.zoom(arr2, 0.5, order=3)
-#		arr2_inter = scipy.ndimage.zoom(arr2_inter0, 2, order=1)
-#		arr2_inter = arr2_inter[:arr2.shape[0],:arr2.shape[1]]
-		cloud_mask = np.logical_or(arr2 <0, np.logical_or(arr1<0,arr1>2500))
-#		res_arr = (np.logical_and(arr2_filter<2000,
-#									arr2_inter<=1200)).astype(np.int)
-		arr2_flat = arr2[cloud_mask!=True]
-		percentile5 = np.percentile(arr2_flat,5)
-		res_arr = (arr2 <= percentile5).astype(np.int)
+		arr3 = gdal.Open('clipped_data/'+pre+'09GA.A'+d+'_b03.tif').ReadAsArray()
+		arrEV = gdal.Open('clipped_data/'+pre+'09GA.A'+d+'_SensorZenith.tif').ReadAsArray()
+		arrEV = np.ma.masked_where(arrEV < -18000, arrEV)*0.01
+		arrES = gdal.Open('clipped_data/'+pre+'09GA.A'+d+'_SolarZenith.tif').ReadAsArray()
+		arrES = np.ma.masked_where(arrES < -18000, arrES)*0.01
+		arrBV = gdal.Open('clipped_data/'+pre+'09GA.A'+d+'_SensorAzimuth.tif').ReadAsArray()
+		arrBV = np.ma.masked_where(arrBV < -18000, arrBV)*0.01
+		arrBS = gdal.Open('clipped_data/'+pre+'09GA.A'+d+'_SolarAzimuth.tif').ReadAsArray()
+		arrBS = np.ma.masked_where(arrBS < -18000, arrBS)*0.01
+		#mask cloud
+		cloud_mask = arr1>=D
+		#water classification
+		res_arr = (np.divide((arr2+A),(arr1+B)) < C).astype(np.int)
 		res_arr[cloud_mask] = -1
-		res_arr[np.logical_and(dem_arr>=300,cloud_mask)]=0
-		res_arr[dem_arr==-99]=-99
+		#mask cloud shadow
+		x_cloud, y_cloud = np.where(cloud_mask)
+		x_shifts = np.tan(np.pi*arrEV[cloud_mask]/180.)*\
+					np.sin(np.pi*(arrBV[cloud_mask]+arrG[cloud_mask])/180.) - \
+					np.tan(np.pi*arrES[cloud_mask]/180.)*\
+					np.sin(np.pi*(arrBS[cloud_mask]+arrG[cloud_mask])/180.)
+		y_shifts = np.tan(np.pi*arrEV[cloud_mask]/180.)*\
+					np.cos(np.pi*(arrBV[cloud_mask]+arrG[cloud_mask])/180.) - \
+					np.tan(np.pi*arrES[cloud_mask]/180.)*\
+					np.cos(np.pi*(arrBS[cloud_mask]+arrG[cloud_mask])/180.)
+		cloud = cloud_mask.astype(np.int)
+		for hc in np.arange(0.5,12.5,0.5):
+			x_shadows = x_cloud + np.around(hc*x_shifts).astype(np.int)
+			y_shadows = y_cloud + np.around(hc*y_shifts).astype(np.int)
+			x_valid = np.logical_and(x_shadows>0,x_shadows<arr1.shape[0]-1)
+			y_valid = np.logical_and(y_shadows>0,y_shadows<arr1.shape[1]-1)
+			x_shadows = x_shadows[np.logical_and(x_valid,y_valid)]
+			y_shadows = y_shadows[np.logical_and(x_valid,y_valid)]
+			cloud[x_shadows,y_shadows] = 1
+		#remove cloud shadow falsely classified as water
+		#ratio between band 2 and band 3
+		arr23 = arr2/(arr3).astype(np.float)
+		res_arr[np.logical_and(arr23>=1.5,np.logical_and(cloud==1,res_arr==1))] = 0
+		#final classified flood maps
 		createTif('results/'+pre+'_'+d+'_bindem.tif',res_arr,geom)
 		
-
 
 
 

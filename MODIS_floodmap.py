@@ -64,7 +64,7 @@ def GetMOD09GQ(dn0, dn1, tiles):
 	os.system('scp pconnect@typhoon.eng.uci.edu:/mnt/t/disk2/pconnect/CHRSData/python/modis/clipped_data/*.tif  /share/ssd-scratch/htranvie/Flood/data/geotiff/')
 	
 
-def GetMOD09GA(dn0, dn1, tile):
+def GetMOD09GA(dn0, dn1, tiles):
 	username = 'hoangtv1989'
 	password = 'Chrs2017'
 	
@@ -84,6 +84,7 @@ def GetMOD09GA(dn0, dn1, tile):
 	dateDelta = dn1 - dn0
 	
 	ftp_path = 'https://e4ftl01.cr.usgs.gov/'
+	tempdata_path = 'tempdata/'
 	list_hdf = []
 	for i in range(dateDelta.days+1):
 		ids = datetime.strftime(dn0 + td(days=i), '%Y.%m.%d')
@@ -98,18 +99,18 @@ def GetMOD09GA(dn0, dn1, tile):
 				print 'error '+dir+' '+ids
 				continue
 			list_files = response.read().splitlines()
-			tile_files = [x.split('href="')[1].split('">')[0] for x in list_files if tile in x]
-			try:
-				hdf_file = [x for x in tile_files if os.path.splitext(x)[1]=='.hdf'][0]
-			except:
-				print 'error '+dir+' '+ids
-				continue
-			if not os.path.isfile('/share/ssd-scratch/htranvie/Flood/tempdata/'+hdf_file):
-				f = urllib2.urlopen(ftp_path+moddir+'/'+hdf_file)
-				with open('/share/ssd-scratch/htranvie/Flood/tempdata/'+hdf_file, "wb") as code:
-					code.write(f.read())
-			list_hdf.append('/share/ssd-scratch/htranvie/Flood/tempdata/'+hdf_file)
-			print 'download complete'
+			for tile in tiles:
+				tile_files = [x.split('href="')[1].split('">')[0] for x in list_files if tile in x]
+				try:
+					hdf_file = [x for x in tile_files if os.path.splitext(x)[1]=='.hdf'][0]
+				except:
+					print 'error '+dir+' '+ids
+					continue
+				if not os.path.isfile(tempdata_path+hdf_file):
+					f = urllib2.urlopen(ftp_path+moddir+'/'+hdf_file)
+					with open(tempdata_path+hdf_file, "wb") as code:
+						code.write(f.read())
+				print 'download complete'
 	os.system('scp '+' '.join(list_hdf)+' pconnect@typhoon.eng.uci.edu:/mnt/t/disk2/pconnect/CHRSData/python/modis/tempdata/')
 	#reprojection on typhoon server
 	os.system('ssh pconnect@typhoon.eng.uci.edu /mnt/t/disk2/pconnect/CHRSData/python/modis/reprojection_band3.sh')
