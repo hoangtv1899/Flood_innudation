@@ -9,23 +9,20 @@ from multiprocessing import Manager
 from contextlib import closing
 import numpy as np
 import scipy.ndimage.morphology as ndimage
-from skimage.filters.rank import median
-from skimage.morphology import square
-from skimage import morphology
+from scipy.ndimage.filters import median_filter as median
+from scipy.ndimage import morphology
 from copy import deepcopy
 from GetCP_from_MODIS import GetCP_from_MODIS
 from sqdistance import sqdistance
 from GetVICoef import GetVICoef
 from VarInt3d import VarInt3d
-from skimage import io
 
-def ClearCloud(oyscacld, t_start, t_end):
+def ClearCloud(oyscacld):
 	try:
 		[n, nr, nc] = oyscacld.shape
 	except:
 		n = 1
 		[nr, nc] = oyscacld.shape
-	dn_end1 = (t_end-t_start).days+1
 	N = n*nr*nc
 	temp = np.empty((n, nr, nc))
 	temp[:] = np.NAN
@@ -42,7 +39,7 @@ def ClearCloud(oyscacld, t_start, t_end):
 	start1 = time.time()
 	with closing(mp.Pool(initializer=init, initargs=(sca, nr, nc, DIST, h, c,))) as p:
         # many processes access different slices of the same array
-		p.map_async(GetCP, range(dn_end1+1))
+		p.map_async(GetCP, range(n))
 	p.join()
 	h1 = tonumpyarray(h)
 	h1 = np.delete(h1, np.where(np.isnan(h1)))
@@ -55,16 +52,16 @@ def ClearCloud(oyscacld, t_start, t_end):
 	print c1.shape
 	if (c1.size == 0) or (c1.shape[0] <= 5):
 		print 'c is empty'
-		ndays = dn_end1 - 1
+		ndays = n/2
 		return (oyscacld[ndays,:,:] == 2).astype(np.int8)
 	else:
 		start2 = time.time()
-		ndays = dn_end1 - 1
+		ndays = n/2
 		try:
 			coef = GetVICoef(c1, h1, 0)
-			np.save('Cloud_free/coef'+t_start.strftime('%Y%m%d'),coef)
+			#np.save('Cloud_free/coef'+t_start.strftime('%Y%m%d'),coef)
 		except:
-			ndays = dn_end1 - 1
+			ndays = n/2
 			return (oyscacld[ndays,:,:] == 2).astype(np.int8)
 		#np.save('coef'+str(num), coef)
 		end2 = time.time()
@@ -129,14 +126,14 @@ def GetCP(i):
 	arr2 = tonumpyarray(c)
 	arr = tonumpyarray(sca)
 	modi = arr[nr*nc*i:nr*nc*(i+1)].reshape(nr, nc)
-	mods = 1*morphology.remove_small_objects(modi==2, min_size=20, connectivity=1)
-	mods = 1*(morphology.remove_small_objects(mods==0, min_size=20, connectivity=1)==0)
+	mods = 1*morphology.binary_opening(modi==2, structure=np.ones((4,4)))
+	mods = 1*(morphology.binary_opening(mods==0, structure=np.ones((4,4)))==0)
 	modstemp = np.zeros((nr+2, nc+2))
 	modstemp[1:-1,1:-1] = mods
 	if np.sum(mods) < 10:
 		print 'skipped'
 		return
-	modstemp = median(modstemp.astype(np.uint8), square(3))
+	modstemp = median(modstemp.astype(np.uint8), size=(3,3))
 	mods = modstemp[1:-1,1:-1]
 	modfi = mods*2 + np.logical_and(modi==1, mods==0).astype(np.uint8)
 	[cbi, cni] = GetCP_from_MODIS(modfi, 18, 3)
