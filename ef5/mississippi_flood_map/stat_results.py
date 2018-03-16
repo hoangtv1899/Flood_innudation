@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 from glob import glob
 
-list_f = glob('output1/*.csv')
-res = pd.DataFrame(columns=['station','coef','bias','nsce'])
+list_f = glob('output/*.csv')
+res = pd.DataFrame(columns=['station','coef','bias','nsce','rmse'])
 for i,f in enumerate(list_f):
 	df = pd.read_csv(f)
 	station = f.split('ts.')[1].split('.crest')[0]
@@ -17,6 +17,7 @@ for i,f in enumerate(list_f):
 	diff_dis = obs - dis
 	diff_avg = obs - obs_mean
 	nsce = 1 - np.sum(np.square(diff_dis))/np.sum(np.square(diff_avg))
-	res.loc[i] = [station,coeff,bias,nsce]
+	rmse = np.sqrt(np.mean((obs-dis)**2))
+	res.loc[i] = [station,coeff,bias,nsce,rmse]
 
 res.to_csv('results.csv',index=False)

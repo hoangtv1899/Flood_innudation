@@ -23,6 +23,7 @@ from subprocess import Popen, PIPE, STDOUT
 import inspect
 import shutil
 
+
 ##print sys.path[0]
 
 ##sys.path.append('D:\Modellen\Snippets_for_all\SCE')
@@ -31,22 +32,6 @@ import shutil
 ## gets number of parameters and an array x with these parameters
 ## let your function or model run/evaluate and give the evaluation value back
 ##------------------------------------------------------------------------------
-
-def createTif(fname, res_arr, geom, dtype=gdal.GDT_Int16, ndata=-99):
-	driver = gdal.GetDriverByName('GTiff')
-	dataset = driver.Create(
-			fname,
-			res_arr.shape[1],
-			res_arr.shape[0],
-			1,
-			dtype,
-			options = ['COMPRESS=LZW'])
-	dataset.SetGeoTransform(geom)
-	outband = dataset.GetRasterBand(1)
-	outband.WriteArray(res_arr)
-	outband.FlushCache()
-	outband.SetNoDataValue(ndata)
-	dataset.FlushCache()
 
 def catValidation(ref_arr, mod_arr):
 	val = []
@@ -72,17 +57,18 @@ def catValidation(ref_arr, mod_arr):
 def Validation(d0,arr_cf,arr_wd):
 	results = pd.DataFrame()
 	arr_cf_bin = (arr_cf>0).astype(np.int)
-	arr_wd_bin = (arr_wd>0.8).astype(np.int)
+	arr_wd_bin = (arr_wd>2).astype(np.int)
 	val_mod, type_mod = catValidation(arr_cf_bin, arr_wd_bin)
 	results['Date'] = [d0]*7
 	results['Types'] = type_mod
 	results['Values'] = val_mod
 	return results
 
-def ResampleImage(img,img1,resolution,bounding_box,srcnodata=-99):
-	os.system('gdalwarp -overwrite -srcnodata '+str(srcnodata)+' -dstnodata -99 -tr '+\
-				str(resolution)+' '+str(resolution)+\
-				' -te '+' '.join([str(x) for x in bounding_box])+' '+img+' '+img1)
+def ResampleImage(img,img1,resolution,bb):
+	Popen(['gdalwarp','-q','-overwrite','-dstnodata','-99','-co','COMPRESS=LZW','-tr',
+			str(resolution),str(resolution),'-te',str(bb[0]),str(bb[1]),str(bb[2]),str(bb[3]),
+			img,img1],
+			stdout=PIPE, stderr=STDOUT).communicate()
 
 def Modrun(npar,x):
 	#working directory
@@ -114,7 +100,13 @@ def Modrun(npar,x):
 						break
 		if '=' in line:
 			if line.split('=')[0] == 'OUTPUT':
-				new_dir = str(int(np.random.rand()*1000000))
+				new_dir = "%.20f" % time.time()
+				new_dir = new_dir[:30].replace('.','')
+				try:
+					os.mkdir(mdir+'output'+new_dir)
+				except:
+					new_dir = new_dir[::-1]
+					os.mkdir(mdir+'output'+new_dir)
 				content[k] = 'OUTPUT=output'+new_dir+'/\n'
 	if len(content) > 758:
 		content = content[:758]
@@ -135,54 +127,97 @@ def Modrun(npar,x):
 			fo.write(line)
 	#Run model
 	try:
-		os.mkdir(mdir+'output'+new_dir)
 		jj0=Popen(['qsub',mdir+'hoang_run_'+new_dir+'.sh'], stdout=PIPE, stderr=STDOUT)
 		stdout0, nothing = jj0.communicate()
-		job_id = stdout0.split(' ')[2]
+		# print stdout0
+		job_id = stdout0.split('Your job ')[1].split(' ')[0]
 		list_jobs = [job_id]
+		# mstart = time.time()
 		while job_id in list_jobs:
-			time.sleep(10)
+			#print 'model #'+new_dir+' is running...'
+			time.sleep(30)
 			jj1=Popen(['qstat','-u','htranvie'], stdout=PIPE, stderr=STDOUT)
 			stdout1, nothing = jj1.communicate()
+			# print stdout1
 			stdout1 = stdout1.split('\n')
 			list_jobs = []
 			for i in range(2,len(stdout1)):
 				list_jobs.append(stdout1[i].split(' ')[0])
-	except:
-		print 'error'
+		# mend = time.time()
+		#print 'total time for running model #'+new_dir+' is: '+str(mend-mstart)+' seconds'
+	except Exception as ex:
+		print 'error running model # '+new_dir
+		print ex.__doc__
+		print ex.message
+		os.remove(mdir+'hoang_run_'+new_dir+'.sh')
+		os.remove(mdir+'control'+new_dir+'.txt')
+		os.remove(mdir+'ef5_'+new_dir+'.e'+job_id)
+		os.remove(mdir+'ef5_'+new_dir+'.o'+job_id)
 		return
 	#remove control and bash files
 	try:
 		os.remove(mdir+'hoang_run_'+new_dir+'.sh')
 		os.remove(mdir+'control'+new_dir+'.txt')
+		os.remove(mdir+'ef5_'+new_dir+'.e'+job_id)
+		os.remove(mdir+'ef5_'+new_dir+'.o'+job_id)
 	except:
 		print 'error removing temporary control and bash files'
 	#Evaluate with cloud-free flood maps
 	list_CF = sorted(glob(wdir+'Water_depth/*.tif'))
 	list_WD = sorted(glob(mdir+'output'+new_dir+'/*.tif'))
-	CF_days = list(set([os.path.basename(x).split('_')[2][:8] for x in list_CF]))
-	WD_days = list(set([os.path.basename(x).split('.')[1][:8] for x in list_WD]))
-	day_to_compare = sorted([x for x in WD_days if x in CF_days])
+	CF_days = list(set([os.path.basename(xx).split('_')[2][:8] for xx in list_CF]))
+	WD_days = list(set([os.path.basename(xx).split('.')[1][:8] for xx in list_WD]))
+	day_to_compare = sorted([xx for xx in WD_days if xx in CF_days])
+	os.mkdir(wdir+'validation/clipped_files/'+new_dir)
 	tot_res = pd.DataFrame()
 	for d in day_to_compare:
-		CF_files = [x for x in list_CF if d in x]
-		WD_files = [x for x in list_WD if d in x]
-		for idx,CF_file in enumerate(CF_files):
-			#Read cloud-free flood map file
+		CF_files = [xx for xx in list_CF if d in xx]
+		WD_files = [xx for xx in list_WD if d in xx]
+		if len(CF_files) == len(WD_files):
+			for idx,CF_file in enumerate(CF_files):
+				#Read cloud-free flood map file
+				ds_CF = gdal.Open(CF_file)
+				geom_CF = ds_CF.GetGeoTransform()
+				arr_CF = ds_CF.ReadAsArray()
+				bb_CF = [geom_CF[0],geom_CF[3]-arr_CF.shape[0]*geom_CF[1],
+							geom_CF[0]+arr_CF.shape[1]*geom_CF[1],geom_CF[3]]
+				#Read output file from model
+				WD_file = WD_files[idx]
+				#Create a temporary clipped directory
+				WD_resampled_file = wdir+'validation/clipped_files/'+new_dir+'/'+os.path.basename(WD_file)
+				try:
+					#resample images to cloud-free flood map
+					ResampleImage(WD_file,WD_resampled_file,geom_CF[1],bb_CF)
+					#validation
+					arr_WD = gdal.Open(WD_resampled_file).ReadAsArray()
+					pd_res = Validation(d,arr_CF,arr_WD)
+					tot_res = tot_res.append(pd_res, ignore_index=True)
+				except:
+					continue
+		else:
+			CF_file = CF_files[0]
+			WD_file = WD_files[0]
 			ds_CF = gdal.Open(CF_file)
 			geom_CF = ds_CF.GetGeoTransform()
 			arr_CF = ds_CF.ReadAsArray()
 			bb_CF = [geom_CF[0],geom_CF[3]-arr_CF.shape[0]*geom_CF[1],
 						geom_CF[0]+arr_CF.shape[1]*geom_CF[1],geom_CF[3]]
-			#Read output file from model
-			WD_file = WD_files[idx]
-			WD_resampled_file = wdir+'validation/clipped_files/'+os.path.basename(WD_file)
-			#resample images to cloud-free flood map
-			ResampleImage(WD_file,WD_resampled_file,geom_CF[1],bb_CF)
-			#validation
-			arr_WD = gdal.Open(WD_resampled_file).ReadAsArray()
-			pd_res = Validation(d,arr_CF,arr_WD)
-			tot_res = tot_res.append(pd_res, ignore_index=True)
+			#Create a temporary clipped directory
+			WD_resampled_file = wdir+'validation/clipped_files/'+new_dir+'/'+os.path.basename(WD_file)
+			try:
+				#resample images to cloud-free flood map
+				ResampleImage(WD_file,WD_resampled_file,geom_CF[1],bb_CF)
+				#validation
+				arr_WD = gdal.Open(WD_resampled_file).ReadAsArray()
+				pd_res = Validation(d,arr_CF,arr_WD)
+				tot_res = tot_res.append(pd_res, ignore_index=True)
+			except:
+				continue
+	vend = time.time()
+	#print 'total time for validation of '+new_dir+' is '+str(vend-mend)+' seconds'
+	#remove the temporary waterdepth directory
+	os.system('rm -rf '+mdir+'output'+new_dir)
+	os.system('rm -rf '+wdir+'validation/clipped_files/'+new_dir)
 	#return average FAR over the period
 	return tot_res.loc[tot_res['Types']=='FAR'].iloc[:,2].mean(axis=0)
 
@@ -199,7 +234,6 @@ def SampleInputMatrix(nrows,npars,bu,bl,iseed,distname='randomUniform'):
     Create inputparameter matrix for nrows simualtions,
     for npars with bounds ub and lb (np.array from same size)
     distname gives the initial sampling ditribution (currently one for all parameters)
-
     returns np.array
     '''
     np.random.seed(iseed)
@@ -292,7 +326,7 @@ def testfunctn5(nopt,x):
 ##   FUNCTION CALL FROM SCE-ALGORITHM !!
 ################################################################################
 
-def EvalObjF(npar,x,testcase=True,testnr=1):
+def EvalObjF(npar,x):
     '''
     The SCE algorithm calls this function which calls the model itself
     (minimalisation of function output or evaluation criterium coming from model)
@@ -302,19 +336,7 @@ def EvalObjF(npar,x,testcase=True,testnr=1):
     '''
 ##    print 'testnummer is %d' %testnr
 
-    if testcase==True:
-        if testnr==1:
-            return testfunctn1(npar,x)
-        if testnr==2:
-            return testfunctn2(npar,x)
-        if testnr==3:
-            return testfunctn3(npar,x)
-        if testnr==4:
-            return testfunctn4(npar,x)
-        if testnr==5:
-            return testfunctn5(npar,x)
-    else:
-		return Modrun(npar,x)          #Welk model/welke objfunctie/welke periode/.... users keuze!
+    return Modrun(npar,x)          #Welk model/welke objfunctie/welke periode/.... users keuze!
 
 
 

@@ -40,11 +40,9 @@ pcento=0.001
 peps=0.001
 iseed= 0
 iniflg=0
-ngs=5
+ngs=4
 ################################################################################
 
-foo=input('Please enter an Example number (1-5) for example, 6 for own model:')
-start = time.clock()
 
 ################################################################################
 # PARAMETERS FOR OPTIMIZATION PROBLEM
@@ -56,72 +54,11 @@ start = time.clock()
 #  bl = the lower bound of the parameters; np.array
 #  bu = the upper bound of the parameters; np.array
 ################################################################################
-
-if foo==1:
-    '''1
-     This is the Goldstein-Price Function
-     Bound X1=[-2,2], X2=[-2,2]; Global Optimum: 3.0,(0.0,-1.0)
-    '''
-    bl=np.array([-2,-2])
-    bu=np.array([2,2])
-    x0=np.array([2,2])
-    bestx,bestf,BESTX,BESTF,ICALL = sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg,testcase=True,testnr=1)
-
-elif foo==2:
-    '''2
-      This is the Rosenbrock Function
-      Bound: X1=[-5,5], X2=[-2,8]; Global Optimum: 0,(1,1)
-        bl=[-5 -5]; bu=[5 5]; x0=[1 1];
-    '''
-    bl=np.array([-5.,-2.])
-    bu=np.array([5.,8.])
-    x0=np.array([-2.,7.])
-    bestx,bestf,BESTX,BESTF,ICALL = sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg,testcase=True,testnr=2)
-
-elif foo==3:
-    '''3
-    %  This is the Six-hump Camelback Function.
-    %  Bound: X1=[-5,5], X2=[-5,5]
-    %  True Optima: -1.031628453489877, (-0.08983,0.7126), (0.08983,-0.7126)
-    '''
-
-    bl=np.array([-2.,-2.])
-    bu=np.array([2.,2.])
-    x0=np.array([-1.,1.])
-    bestx,bestf,BESTX,BESTF,ICALL = sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg,testcase=True,testnr=3)
-
-elif foo==4:
-    '''4
-    %  This is the Rastrigin Function
-    %  Bound: X1=[-1,1], X2=[-1,1]
-    %  Global Optimum: -2, (0,0)
-    '''
-    bl=np.array([-5.,-5.])
-    bu=np.array([5.,5.])
-    x0=np.array([-1.,1.])
-    bestx,bestf,BESTX,BESTF,ICALL = sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg,testcase=True,testnr=4)
-
-elif foo==5:
-    '''5
-      This is the Griewank Function (2-D or 10-D)
-      Bound: X(i)=[-600,600], for i=1,2,...,10  !for visualization only 2!
-      Global Optimum: 0, at origin
-    '''
-    bl=-600*np.ones(2)
-    bu=600*np.ones(2)
-    x0=np.zeros(2)
-    bestx,bestf,BESTX,BESTF,ICALL = sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg,testcase=True,testnr=5)
-
-elif foo==6:
-    '''6
-    Run your own model - give
-    '''
-    bl=np.array([])
-    bu=np.array([])
-    x0=np.array([])
-    bestx,bestf,BESTX,BESTF,ICALL = sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg,testcase=False,testnr=6)
-
-
+start = time.clock()
+bu=np.hstack([np.ones(12)*4,np.ones(12)])
+bl=np.zeros(24)
+x0=np.zeros(24)
+bestx,bestf,BESTX,BESTF,ICALL = sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg)
 
 elapsed = (time.clock() - start)
 print 'The calculation of the SCE algorithm took %f seconds' %elapsed
