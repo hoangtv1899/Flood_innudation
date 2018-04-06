@@ -59,6 +59,7 @@ def ParseLoopInfo(content,i):
 def ReadCT(content):
 	stationMeta = []
 	calibratingGauge = {}
+	curr_style = ''
 	for i,line in enumerate(content):
 		line = line.strip()
 		if (line and line[0]=='[') and (line[-1]==']'):
@@ -112,7 +113,7 @@ content = open(CTfile,'r').readlines()
 
 stationMeta, calibratingGauge,curr_style = ReadCT(content)
 #os.system('ef5 > status.txt')
-for jk,station in enumerate(['Winona', 'Wisconsin_rapids', 'Wisconsin_dells', 'Clinton', 'Rockton', 'Joslin']):
+for jk,station in enumerate(stationMeta.gauge.tolist()):
 	os.system('ef5')
 	CTfile = 'control.txt'
 	#Open control file

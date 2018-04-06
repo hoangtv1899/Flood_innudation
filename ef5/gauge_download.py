@@ -80,7 +80,7 @@ geom = ds.GetGeoTransform()
 facArr = ds.ReadAsArray()
 
 #Read data from usgs stations
-stationResPath = 'https://nwis.waterdata.usgs.gov/nwis/inventory?nw_longitude_va=-94&nw_latitude_va=47&se_longitude_va=-88&se_latitude_va=41&coordinate_format=decimal_degrees&data_type=peak&group_key=NONE&format=sitefile_output&sitefile_output_format=xml&column_name=site_no&column_name=station_nm&column_name=dec_lat_va&column_name=dec_long_va&column_name=peak_begin_date&column_name=peak_end_date&list_of_search_criteria=lat_long_bounding_box%2Cdata_type'
+stationResPath = 'https://nwis.waterdata.usgs.gov/nwis/inventory?nw_longitude_va=-97.3587&nw_latitude_va=47.775&se_longitude_va=-85.8994&se_latitude_va=38.6911&coordinate_format=decimal_degrees&data_type=peak&group_key=NONE&format=sitefile_output&sitefile_output_format=xml&column_name=site_no&column_name=station_nm&column_name=dec_lat_va&column_name=dec_long_va&column_name=peak_begin_date&column_name=peak_end_date&list_of_search_criteria=lat_long_bounding_box%2Cdata_type'
 content = urllib2.urlopen(stationResPath)
 siteDF = xml2df(content.read())
 siteDF['dec_lat_va'] = pd.to_numeric(siteDF.dec_lat_va)
@@ -89,9 +89,10 @@ siteDF['peak_begin_date'] = pd.to_datetime(siteDF.peak_begin_date)
 siteDF['peak_end_date'] = pd.to_datetime(siteDF.peak_end_date)
 siteDF['basin_area'] = np.nan
 #for mississippi river
-selectSite = siteDF[siteDF.site_no.isin(['05331000','05378500','05420500','05340500',
-										'05365500','05400760','05404000','05437500',
-										'05446500'])]
+ss = pd.read_csv('ef5/selected_stations.csv')
+siteno = ss.SITENO.tolist()
+siteno = ['0'+str(x) for x in siteno]
+selectSite = siteDF[siteDF.site_no.isin(siteno)]
 
 #select stations inside domain
 listP = [shapely.geometry.Point(xy) for xy in zip(siteDF.dec_long_va, siteDF.dec_lat_va)]

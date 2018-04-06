@@ -145,16 +145,3 @@ with open('bdy_file.bdy','w') as bdy_file:
 			elapsed_seconds = int((curr_t-t_start).total_seconds())
 			if elapsed_seconds >=0:
 				bdy_file.write('\t'+line.split('\t')[1]+'\t'+str(elapsed_seconds)+'\n')
-
-
-
-
-
-
-
-
-
-
-
-
-

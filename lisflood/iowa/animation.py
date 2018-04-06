@@ -21,13 +21,13 @@ def animate(i):
 	return im1, ytext
 
 #load data
-list_res = sorted(glob('results/*.wd'))
+list_res = sorted(glob('results1/*.wd'))
 res_arr = np.zeros((len(list_res),201,124))
 for i,res_f in enumerate(list_res):
 	temp_arr = np.loadtxt(res_f,skiprows=6)
 	res_arr[i,:,:] = temp_arr
 
-t0 = datetime(2015,11,1)
+t0 = datetime(2017,4,1)
 fig =plt.figure()
 ax = fig.add_subplot(111)
 m1 = Basemap(llcrnrlon=-90.39,llcrnrlat=37.3,urcrnrlon=-89.39,urcrnrlat=38.63,\
@@ -36,9 +36,9 @@ m1.drawparallels(np.arange(-35.,40.,0.5),labels=[1,0,0,0], linewidth=0.05)
 m1.drawmeridians(np.arange(-90.,-80.,0.5),labels=[0,0,0,1], linewidth=0.05)
 im1=m1.imshow(np.flipud(res_arr[0,:,:]),cmap='Blues')
 m1.colorbar(location='right',pad='5%')
-plt.clim(0,15)
+#plt.clim(0,15)
 ytext = ax.text(0.65,0.95,(t0 + timedelta(days=0)).strftime('%Y-%m-%d'),transform=ax.transAxes)
 
 anim = animation.FuncAnimation(fig, animate,
-                               frames=120, interval=120)
-anim.save('river_animation.gif', writer='imagemagick', fps=3)
+                               frames=61, interval=31)
+anim.save('river_animation1.gif', writer='imagemagick', fps=5)

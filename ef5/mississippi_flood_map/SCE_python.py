@@ -369,7 +369,7 @@ def sceua(x0,bl,bu,maxn,kstop,pcento,peps,ngs,iseed,iniflg):
 			if criter_change < pcento:
 				print 'THE BEST POINT HAS IMPROVED IN LAST %d LOOPS BY LESS THAN THE THRESHOLD %f' %(kstop,pcento)
 				print 'CONVERGENCY HAS ACHIEVED BASED ON OBJECTIVE FUNCTION CRITERIA!!!'
-
+	
 	# End of the Outer Loops
 	print 'SEARCH WAS STOPPED AT TRIAL NUMBER: %d' %icall
 	print 'NORMALIZED GEOMETRIC RANGE = %f'  %gnrng

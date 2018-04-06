@@ -34,8 +34,8 @@ from SCE_functioncall import *
 #  kstop = maximum number of evolution loops before convergency
 #  pcento = the percentage change allowed in kstop loops before convergency
 #-------------------------------------------------------------------------------
-maxn=10000
-kstop=30
+maxn=100000
+kstop=100
 pcento=0.001
 peps=0.001
 iseed= 0

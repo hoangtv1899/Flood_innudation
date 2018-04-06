@@ -327,16 +327,15 @@ def testfunctn5(nopt,x):
 ################################################################################
 
 def EvalObjF(npar,x):
-    '''
-    The SCE algorithm calls this function which calls the model itself
-    (minimalisation of function output or evaluation criterium coming from model)
-    and returns the evaluation function to the SCE-algorithm
-
-    If testcase =True, one of the example tests are run
-    '''
-##    print 'testnummer is %d' %testnr
-
-    return Modrun(npar,x)          #Welk model/welke objfunctie/welke periode/.... users keuze!
+	'''
+	The SCE algorithm calls this function which calls the model itself
+	(minimalisation of function output or evaluation criterium coming from model)
+	and returns the evaluation function to the SCE-algorithm
+	
+	If testcase =True, one of the example tests are run
+	'''
+	# return testfunctn5(npar,x)
+	return Modrun(npar,x)          #Welk model/welke objfunctie/welke periode/.... users keuze!
 
 
 
